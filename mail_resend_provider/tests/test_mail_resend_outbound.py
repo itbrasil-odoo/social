@@ -80,9 +80,77 @@ class TestMailResendOutbound(MailResendProviderCommon):
                 "email_from": "Employee C2 <employee@wrong-domain.test>",
                 "reply_to": "support@example.com",
                 "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
             }
         )
+        route = self.env["mail.resend.route"].search(
+            [("mail_message_id", "=", mail.mail_message_id.id)]
+        )
         self.assertEqual(mail.reply_to, "support@example.com")
+        self.assertEqual(route.mail_message_id, mail.mail_message_id)
+        self.assertFalse(route.reply_token)
+        self.assertFalse(route.reply_address)
+
+    def test_threadable_mail_create_uses_technical_reply_to(self):
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Threaded Mail",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+            }
+        )
+        route = self.env["mail.resend.route"].search(
+            [("mail_message_id", "=", mail.mail_message_id.id)]
+        )
+        expected_reply_to = self.env["mail.message"]._get_reply_to(
+            {
+                "email_from": mail.email_from,
+                "message_type": mail.message_type,
+                "model": mail.model,
+                "res_id": mail.res_id,
+            }
+        )
+
+        self.assertTrue(route)
+        self.assertTrue(route.reply_token)
+        self.assertEqual(
+            route.reply_address,
+            f"reply-{route.reply_token}@{self.company_2.alias_domain_id.name}",
+        )
+        self.assertEqual(
+            mail.reply_to,
+            self.env["mail.mail"]._resend_format_reply_to(
+                expected_reply_to,
+                route.reply_address,
+            ),
+        )
+        self.assertEqual(route.state, "draft")
+
+    def test_threadable_mail_skips_route_when_reply_to_force_new(self):
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Force New",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+                "reply_to_force_new": True,
+            }
+        )
+        route = self.env["mail.resend.route"].search(
+            [("mail_message_id", "=", mail.mail_message_id.id)]
+        )
+        self.assertFalse(route)
 
     def test_send_uses_explicit_company_server(self):
         mail = self.env["mail.mail"].create(
@@ -127,6 +195,34 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(mail.reply_to, original_email_from)
         self.assertEqual(self._mails[0]["email_from"], expected_email_from)
         self.assertEqual(self._mails[0]["reply_to"], original_email_from)
+
+    def test_send_captures_provider_message_id(self):
+        provider_message_id = "<provider-thread@example.com>"
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Provider Thread",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+            }
+        )
+        route = self.env["mail.resend.route"].search(
+            [("mail_message_id", "=", mail.mail_message_id.id)]
+        )
+
+        with self.mock_smtplib_connection(
+            data_reply=(250, f"Ok {provider_message_id}".encode())
+        ):
+            mail.send()
+
+        route.invalidate_recordset()
+        self.assertEqual(mail.message_id, provider_message_id)
+        self.assertEqual(route.provider_message_id, provider_message_id)
+        self.assertEqual(route.state, "sent")
 
     def test_mail_create_uses_company_specific_alias_domain(self):
         company_2_alias_domain = self.env["mail.alias.domain"].create(
@@ -223,7 +319,8 @@ class TestMailResendOutbound(MailResendProviderCommon):
         )
 
         with patch(
-            "odoo.addons.base.models.ir_mail_server.IrMailServer.send_email",
+            "odoo.addons.mail_resend_provider.models.ir_mail_server."
+            "IrMailServer._resend_send_email",
             side_effect=smtp_error,
         ):
             with self.assertRaisesRegex(MailDeliveryException, "Resend rejected"):
