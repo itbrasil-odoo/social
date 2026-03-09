@@ -95,6 +95,7 @@ class MailResendInbound(models.Model):
                         order="id desc",
                     )
                 )
+                mail_message.author_id._resend_sanitize_external_email_identity()
                 if not correlation_method and mail_message:
                     correlation_method = "native"
                 if not correlated_message and mail_message.parent_id:

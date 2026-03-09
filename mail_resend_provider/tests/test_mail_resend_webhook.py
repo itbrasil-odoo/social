@@ -196,6 +196,61 @@ class TestMailResendWebhook(HttpCase):
         self.assertEqual(inbound.mail_message_id.model, "res.partner")
         self.assertEqual(inbound.mail_message_id.res_id, partner.id)
 
+    def test_webhook_sanitizes_malformed_author_partner_after_processing(self):
+        message_id = "<resend-http-repair@example.com>"
+        recipient = f"{self.alias_admin.alias_name}@{self.alias_domain.name}"
+        malformed_value = '"Renan Teixeira" <contatorenanteixeira@icloud.com>'
+        partner = self.env["res.partner"].create(
+            {
+                "name": malformed_value,
+                "email": malformed_value,
+            }
+        )
+        payload = {
+            "type": "email.received",
+            "data": {
+                "email_id": "email_http_repair",
+                "message_id": message_id,
+            },
+        }
+        raw_email = MailResendProviderCommon.make_raw_email(
+            to_address=recipient,
+            subject="Webhook Repair",
+            message_id=message_id,
+            from_address=malformed_value,
+            body="Repair body",
+        )
+        headers = MailResendProviderCommon.make_webhook_headers(
+            json.dumps(payload), self.account.webhook_signing_secret
+        )
+        with (
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._retrieve_received_email",
+                autospec=True,
+                return_value={
+                    "id": "email_http_repair",
+                    "message_id": message_id,
+                    "raw": {"download_url": "https://download/raw-repair"},
+                },
+            ),
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._download_raw_email",
+                autospec=True,
+                return_value=raw_email,
+            ),
+        ):
+            response = self._post_webhook(payload, headers)
+
+        partner.invalidate_recordset()
+        inbound = self.env["mail.resend.inbound"].search(
+            [("resend_email_id", "=", "email_http_repair")]
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inbound.state, "done")
+        self.assertEqual(partner.name, "Renan Teixeira")
+        self.assertEqual(partner.email, "contatorenanteixeira@icloud.com")
+        self.assertEqual(inbound.mail_message_id.author_id, partner)
+
     def test_webhook_reply_updates_existing_thread(self):
         first_message_id = "<resend-http-2@example.com>"
         second_message_id = "<resend-http-3@example.com>"
@@ -280,13 +335,14 @@ class TestMailResendWebhook(HttpCase):
         ):
             response = self._post_webhook(second_payload, second_headers)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self.env["mail.message"].search_count(
-                [("model", "=", "res.partner"), ("res_id", "=", partner.id)]
-            ),
-            2,
+        reply_message = self.env["mail.message"].search(
+            [("message_id", "=", second_message_id)],
+            limit=1,
         )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(reply_message.model, "res.partner")
+        self.assertEqual(reply_message.res_id, partner.id)
+        self.assertEqual(reply_message.parent_id.message_id, first_message_id)
         self.assertEqual(
             self.env["res.partner"].search_count([("name", "=", "Reply Target")]), 1
         )
