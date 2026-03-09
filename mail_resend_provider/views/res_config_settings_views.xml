@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field
+            name="name"
+        >res.config.settings.view.form.inherit.mail.resend.provider</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="mail.res_config_settings_view_form" />
+        <field name="arch" type="xml">
+            <setting id="email-alias-setting" position="after">
+                <setting
+                    id="mail_resend_provider_settings"
+                    string="Resend Provider"
+                    company_dependent="1"
+                    help="Configure a Resend account and the managed outgoing SMTP server for this company."
+                >
+                    <field
+                        name="resend_account_id"
+                        options="{'no_create_edit': True}"
+                    />
+                    <div class="content-group">
+                        <div class="mt8">
+                            <button
+                                type="object"
+                                name="action_open_resend_accounts"
+                                string="Resend Accounts"
+                                icon="oi-arrow-right"
+                                class="btn-link"
+                            />
+                        </div>
+                        <div class="mt8">
+                            <button
+                                type="object"
+                                name="action_sync_resend_webhook"
+                                string="Sync Webhook"
+                                icon="oi-arrow-right"
+                                class="btn-link"
+                                invisible="not resend_account_id"
+                            />
+                        </div>
+                        <div class="row mt16" invisible="not resend_account_id">
+                            <label for="resend_outgoing_server_id" class="col-lg-3" />
+                            <field name="resend_outgoing_server_id" />
+                        </div>
+                        <div class="row mt16" invisible="not resend_account_id">
+                            <label for="resend_webhook_status" class="col-lg-3" />
+                            <field name="resend_webhook_status" />
+                        </div>
+                        <div class="row mt16" invisible="not resend_account_id">
+                            <label for="resend_webhook_url" class="col-lg-3" />
+                            <field name="resend_webhook_url" widget="url" />
+                        </div>
+                        <div
+                            class="row mt16"
+                            invisible="not resend_account_id or not resend_last_sync_error"
+                        >
+                            <label for="resend_last_sync_error" class="col-lg-3" />
+                            <field name="resend_last_sync_error" />
+                        </div>
+                    </div>
+                </setting>
+            </setting>
+        </field>
+    </record>
+</odoo>
