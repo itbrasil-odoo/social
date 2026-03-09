@@ -45,15 +45,23 @@ class MailMail(models.Model):
     def send(self, auto_commit=False, raise_exception=False, post_send_callback=None):
         outgoing_mails = self.filtered(lambda mail: mail.state == "outgoing")
         outgoing_mails._resend_prepare_outgoing_mails()
-        result = super().send(
+        return super().send(
             auto_commit=auto_commit,
             raise_exception=raise_exception,
             post_send_callback=post_send_callback,
         )
-        self.filtered(
+
+    def _postprocess_sent_message(
+        self, success_pids, failure_reason=False, failure_type=None
+    ):
+        self.exists().filtered(
             lambda mail: mail.state == "sent" and mail.mail_server_id.resend_managed
         )._resend_mark_routes_sent()
-        return result
+        return super()._postprocess_sent_message(
+            success_pids=success_pids,
+            failure_reason=failure_reason,
+            failure_type=failure_type,
+        )
 
     @api.model
     def _resend_resolve_company_from_values(self, values):
@@ -319,7 +327,7 @@ class MailMail(models.Model):
                 mail.write(mail_values)
 
     def _resend_mark_routes_sent(self):
-        for mail in self:
+        for mail in self.exists():
             route = mail._resend_get_route()
             if route:
                 route.write(
