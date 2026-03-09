@@ -1,10 +1,13 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+import re
 import uuid
 
 from odoo import _, api, models, tools
 from odoo.exceptions import UserError
+
+MESSAGE_ID_PATTERN = re.compile(r"<[^<>\s]+>")
 
 
 class MailMail(models.Model):
@@ -241,6 +244,15 @@ class MailMail(models.Model):
             }
         )
 
+    @api.model
+    def _resend_merge_references(self, references, canonical_message_id):
+        reference_ids = list(
+            dict.fromkeys(MESSAGE_ID_PATTERN.findall(references or ""))
+        )
+        if canonical_message_id and canonical_message_id not in reference_ids:
+            reference_ids.append(canonical_message_id)
+        return " ".join(reference_ids)
+
     def _resend_get_route(self):
         self.ensure_one()
         route_model = self.env["mail.resend.route"].sudo()
@@ -296,6 +308,13 @@ class MailMail(models.Model):
             "state": "draft",
         }
         mail_values = {}
+        canonical_message_id = self.mail_message_id.message_id
+        merged_references = self._resend_merge_references(
+            self.references,
+            canonical_message_id,
+        )
+        if merged_references and merged_references != (self.references or ""):
+            mail_values["references"] = merged_references
         if is_auto_reply_to and current_reply_to:
             token = route.reply_token or uuid.uuid4().hex
             reply_address = self._resend_build_reply_address(token, company)
