@@ -131,6 +131,7 @@ class TestMailResendOutbound(MailResendProviderCommon):
                 route.reply_address,
             ),
         )
+        self.assertEqual(mail.references, mail.mail_message_id.message_id)
         self.assertEqual(route.state, "draft")
 
     def test_threadable_mail_skips_route_when_reply_to_force_new(self):
@@ -196,6 +197,28 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(self._mails[0]["email_from"], expected_email_from)
         self.assertEqual(self._mails[0]["reply_to"], original_email_from)
 
+    def test_prepare_outgoing_merges_canonical_reference_on_threadable_mail(self):
+        original_reference = "<upstream-thread@example.com>"
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Queued Threaded Mail",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": f"{self.default_from}@{self.alias_domain}",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+            }
+        )
+        mail.write({"references": original_reference})
+        mail._resend_prepare_outgoing_mails()
+
+        self.assertEqual(
+            mail.references,
+            f"{original_reference} {mail.mail_message_id.message_id}",
+        )
+
     def test_send_captures_provider_message_id(self):
         provider_message_id = "<provider-thread@example.com>"
         mail = self.env["mail.mail"].create(
@@ -244,6 +267,33 @@ class TestMailResendOutbound(MailResendProviderCommon):
 
         self.assertFalse(self.env["mail.mail"].browse(mail.id).exists())
         self.assertEqual(self.testing_smtp_session.data.call_count, 1)
+
+    def test_non_resend_server_keeps_existing_references(self):
+        manual_server = self.env["ir.mail_server"].create(
+            {
+                "name": "Manual SMTP",
+                "smtp_host": "smtp.example.com",
+                "smtp_encryption": "none",
+                "smtp_user": "manual",
+                "smtp_pass": "manual",
+            }
+        )
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Manual Threaded Mail",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": f"{self.default_from}@{self.alias_domain}",
+                "record_company_id": self.company_2.id,
+                "mail_server_id": manual_server.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+                "references": "<manual-reference@example.com>",
+            }
+        )
+
+        self.assertEqual(mail.references, "<manual-reference@example.com>")
 
     def test_mail_create_uses_company_specific_alias_domain(self):
         company_2_alias_domain = self.env["mail.alias.domain"].create(

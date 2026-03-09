@@ -463,3 +463,66 @@ class TestMailResendWebhook(HttpCase):
         self.assertEqual(reply_message.model, "res.partner")
         self.assertEqual(reply_message.res_id, partner.id)
         self.assertEqual(reply_message.parent_id, outbound_message)
+
+    def test_webhook_references_route_reply_to_default_from_natively(self):
+        provider_message_id = "<provider-native-route@example.com>"
+        partner, outbound_message, route = self._create_thread_route(
+            company=self.company_admin,
+            partner_name="Reply Native Route",
+            with_reply_token=False,
+        )
+        inbound_message_id = "<resend-http-native-route@example.com>"
+        payload = {
+            "type": "email.received",
+            "data": {
+                "email_id": "email_http_native_route",
+                "message_id": inbound_message_id,
+            },
+        }
+        headers = MailResendProviderCommon.make_webhook_headers(
+            json.dumps(payload),
+            self.account.webhook_signing_secret,
+            msg_id="msg_native_route",
+        )
+        raw_email = MailResendProviderCommon.make_raw_email(
+            to_address=self.company_admin.alias_domain_id.default_from_email,
+            subject=f"Re: {partner.name}",
+            message_id=inbound_message_id,
+            body="Native route body",
+            in_reply_to=provider_message_id,
+            references=f"{outbound_message.message_id} {provider_message_id}",
+        )
+        with (
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._retrieve_received_email",
+                autospec=True,
+                return_value={
+                    "id": "email_http_native_route",
+                    "message_id": inbound_message_id,
+                    "raw": {"download_url": "https://download/raw-native-route"},
+                },
+            ),
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._download_raw_email",
+                autospec=True,
+                return_value=raw_email,
+            ),
+        ):
+            response = self._post_webhook(payload, headers)
+
+        inbound = self.env["mail.resend.inbound"].search(
+            [("resend_email_id", "=", "email_http_native_route")]
+        )
+        reply_message = self.env["mail.message"].search(
+            [("message_id", "=", inbound_message_id)],
+            limit=1,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inbound.state, "done")
+        self.assertFalse(inbound.route_id)
+        self.assertEqual(inbound.correlation_method, "native")
+        self.assertEqual(inbound.correlated_message_id, outbound_message)
+        self.assertEqual(reply_message.model, "res.partner")
+        self.assertEqual(reply_message.res_id, partner.id)
+        self.assertEqual(reply_message.parent_id, outbound_message)
+        self.assertEqual(route.state, "sent")
