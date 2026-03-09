@@ -363,6 +363,8 @@ class MailMail(models.Model):
                 company = mail._resend_get_company()
                 if company and company.resend_account_id:
                     mail.mail_server_id = company._ensure_resend_outgoing_server()
+            if mail.mail_server_id and mail.mail_server_id.resend_managed:
+                mail.recipient_ids._resend_sanitize_external_email_identity()
             values = mail._resend_prepare_sender_values(
                 email_from=mail.email_from,
                 reply_to=mail.reply_to,

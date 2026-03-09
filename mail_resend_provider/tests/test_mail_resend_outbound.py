@@ -16,6 +16,38 @@ from .common import MailResendProviderCommon
 
 @tagged("-at_install", "post_install")
 class TestMailResendOutbound(MailResendProviderCommon):
+    def test_partner_identity_repair_is_idempotent_and_skips_internal_users(self):
+        malformed_value = '"Renan Teixeira" <contatorenanteixeira@icloud.com>'
+        external_partner = self.env["res.partner"].create(
+            {
+                "name": malformed_value,
+                "email": malformed_value,
+            }
+        )
+        internal_partner = self.user_employee_c2.partner_id
+        original_internal_values = {
+            "name": internal_partner.name,
+            "email": internal_partner.email,
+        }
+        internal_partner.write(
+            {
+                "name": malformed_value,
+                "email": malformed_value,
+            }
+        )
+
+        self.env["res.partner"]._resend_repair_external_email_identities()
+        self.env["res.partner"]._resend_repair_external_email_identities()
+
+        external_partner.invalidate_recordset()
+        internal_partner.invalidate_recordset()
+        self.assertEqual(external_partner.name, "Renan Teixeira")
+        self.assertEqual(external_partner.email, "contatorenanteixeira@icloud.com")
+        self.assertEqual(internal_partner.name, malformed_value)
+        self.assertEqual(internal_partner.email, malformed_value)
+
+        internal_partner.write(original_internal_values)
+
     def test_mail_create_rewrites_sender_to_company_alias_domain(self):
         mail = self.env["mail.mail"].create(
             {
@@ -196,6 +228,41 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(mail.reply_to, original_email_from)
         self.assertEqual(self._mails[0]["email_from"], expected_email_from)
         self.assertEqual(self._mails[0]["reply_to"], original_email_from)
+
+    def test_send_sanitizes_malformed_recipient_partner_before_smtp(self):
+        malformed_value = '"Renan Teixeira" <contatorenanteixeira@icloud.com>'
+        malformed_partner = self.env["res.partner"].create(
+            {
+                "name": malformed_value,
+                "email": malformed_value,
+            }
+        )
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Malformed Recipient",
+                "body_html": "<p>Hello</p>",
+                "email_from": f"{self.default_from}@{self.alias_domain}",
+                "record_company_id": self.company_2.id,
+                "recipient_ids": [(4, malformed_partner.id)],
+            }
+        )
+        malformed_partner.write(
+            {
+                "name": malformed_value,
+                "email": malformed_value,
+            }
+        )
+
+        with self.mock_smtplib_connection():
+            mail.send()
+
+        malformed_partner.invalidate_recordset()
+        self.assertEqual(malformed_partner.name, "Renan Teixeira")
+        self.assertEqual(malformed_partner.email, "contatorenanteixeira@icloud.com")
+        self.assertEqual(
+            self.testing_smtp_session.rcpt.call_args_list[0].args[0],
+            "contatorenanteixeira@icloud.com",
+        )
 
     def test_prepare_outgoing_merges_canonical_reference_on_threadable_mail(self):
         original_reference = "<upstream-thread@example.com>"

@@ -4,7 +4,7 @@
 {
     "name": "Mail Resend Provider",
     "summary": "Send and receive emails through Resend",
-    "version": "18.0.1.0.0",
+    "version": "18.0.1.0.1",
     "category": "Discuss",
     "license": "AGPL-3",
     "author": "Odoo Community Association (OCA), IT Brasil, Renan Teixeira",
