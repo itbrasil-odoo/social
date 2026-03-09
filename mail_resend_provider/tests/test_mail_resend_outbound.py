@@ -224,6 +224,27 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(route.provider_message_id, provider_message_id)
         self.assertEqual(route.state, "sent")
 
+    def test_send_auto_delete_mail_does_not_crash_after_unlink(self):
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Auto Delete",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+                "auto_delete": True,
+            }
+        )
+
+        with self.mock_smtplib_connection():
+            mail.send()
+
+        self.assertFalse(self.env["mail.mail"].browse(mail.id).exists())
+        self.assertEqual(self.testing_smtp_session.data.call_count, 1)
+
     def test_mail_create_uses_company_specific_alias_domain(self):
         company_2_alias_domain = self.env["mail.alias.domain"].create(
             {
