@@ -1,7 +1,10 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from odoo import _, api, fields, models, tools
+import re
+import smtplib
+
+from odoo import _, api, fields, models, modules, tools
 from odoo.exceptions import UserError
 
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
@@ -133,6 +136,20 @@ class IrMailServer(models.Model):
     ):
         mail_server = self.browse(mail_server_id) if mail_server_id else self[:1]
         try:
+            if mail_server and mail_server.resend_managed:
+                return mail_server._resend_send_email(
+                    message,
+                    mail_server_id=mail_server_id,
+                    smtp_server=smtp_server,
+                    smtp_port=smtp_port,
+                    smtp_user=smtp_user,
+                    smtp_password=smtp_password,
+                    smtp_encryption=smtp_encryption,
+                    smtp_ssl_certificate=smtp_ssl_certificate,
+                    smtp_ssl_private_key=smtp_ssl_private_key,
+                    smtp_debug=smtp_debug,
+                    smtp_session=smtp_session,
+                )
             return super().send_email(
                 message,
                 mail_server_id=mail_server_id,
@@ -159,6 +176,104 @@ class IrMailServer(models.Model):
                     translated_error,
                 ) from err
             raise
+
+    def _resend_send_email(
+        self,
+        message,
+        mail_server_id=None,
+        smtp_server=None,
+        smtp_port=None,
+        smtp_user=None,
+        smtp_password=None,
+        smtp_encryption=None,
+        smtp_ssl_certificate=None,
+        smtp_ssl_private_key=None,
+        smtp_debug=False,
+        smtp_session=None,
+    ):
+        self.ensure_one()
+        smtp = smtp_session
+        if not smtp:
+            smtp = self.connect(
+                smtp_server,
+                smtp_port,
+                smtp_user,
+                smtp_password,
+                smtp_encryption,
+                smtp_from=message["From"],
+                ssl_certificate=smtp_ssl_certificate,
+                ssl_private_key=smtp_ssl_private_key,
+                smtp_debug=smtp_debug,
+                mail_server_id=mail_server_id,
+            )
+
+        smtp_from, smtp_to_list, message = self._prepare_email_message(message, smtp)
+
+        if modules.module.current_test:
+            return message["Message-Id"]
+
+        server_name = smtp_server or self.smtp_host
+        try:
+            message_id = message["Message-Id"]
+            provider_message_id = self._resend_smtp_send_message(
+                smtp,
+                message,
+                smtp_from,
+                smtp_to_list,
+            )
+            if not smtp_session:
+                smtp.quit()
+        except smtplib.SMTPServerDisconnected:
+            raise
+        except Exception as err:
+            error_message = _(
+                "Mail delivery failed via SMTP server '%(server)s'.\n"
+                "%(exception_name)s: %(message)s",
+                server=server_name,
+                exception_name=err.__class__.__name__,
+                message=err,
+            )
+            raise MailDeliveryException(
+                _("Mail Delivery Failed"), error_message
+            ) from err
+        return provider_message_id or message_id
+
+    def _resend_smtp_send_message(self, smtp, message, smtp_from, smtp_to_list):
+        code, reply = smtp.mail(smtp_from)
+        if code != 250:
+            raise smtplib.SMTPSenderRefused(code, reply, smtp_from)
+
+        accepted_recipients = []
+        refused_recipients = {}
+        for recipient in smtp_to_list:
+            code, reply = smtp.rcpt(recipient)
+            if code in (250, 251):
+                accepted_recipients.append(recipient)
+            else:
+                refused_recipients[recipient] = (code, reply)
+        if not accepted_recipients:
+            raise smtplib.SMTPRecipientsRefused(refused_recipients)
+
+        code, reply = smtp.data(message.as_bytes())
+        if code != 250:
+            raise smtplib.SMTPDataError(code, reply)
+        return self._resend_extract_provider_message_id(reply)
+
+    @api.model
+    def _resend_extract_provider_message_id(self, reply):
+        if not reply:
+            return False
+        if isinstance(reply, bytes):
+            reply = reply.decode("utf-8", errors="ignore")
+        else:
+            reply = str(reply)
+        match = re.search(r"<[^<>\s]+>", reply)
+        if match:
+            return match.group(0)
+        match = re.search(r"([^\s<>]+@[^\s<>]+)", reply)
+        if match:
+            return f"<{match.group(1)}>"
+        return False
 
     def _resend_translate_delivery_error(self, error, message):
         self.ensure_one()

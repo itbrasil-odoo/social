@@ -2,6 +2,7 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
 import json
+import uuid
 from unittest.mock import patch
 
 from odoo.tests.common import HttpCase, tagged
@@ -79,6 +80,48 @@ class TestMailResendWebhook(HttpCase):
             data=json.dumps(payload),
             headers=headers,
         )
+
+    def _create_thread_route(
+        self,
+        *,
+        company,
+        partner_name,
+        provider_message_id=False,
+        with_reply_token=True,
+    ):
+        partner = self.env["res.partner"].create(
+            {
+                "name": partner_name,
+                "company_id": company.id,
+                "email": f"{partner_name.lower().replace(' ', '.')}@example.com",
+            }
+        )
+        outbound_message = partner.message_post(
+            body="<p>Outbound</p>",
+            subject=partner_name,
+            message_type="email",
+            subtype_xmlid="mail.mt_comment",
+            email_from=company.alias_domain_id.default_from_email,
+        )
+        route_values = {
+            "account_id": self.account.id,
+            "company_id": company.id,
+            "mail_message_id": outbound_message.id,
+            "model": "res.partner",
+            "provider_message_id": provider_message_id or False,
+            "res_id": partner.id,
+            "state": "sent",
+        }
+        if with_reply_token:
+            token = uuid.uuid4().hex
+            route_values.update(
+                {
+                    "reply_address": f"reply-{token}@{company.alias_domain_id.name}",
+                    "reply_token": token,
+                }
+            )
+        route = self.env["mail.resend.route"].create(route_values)
+        return partner, outbound_message, route
 
     def test_webhook_unknown_token(self):
         response = self._post_webhook(
@@ -300,3 +343,123 @@ class TestMailResendWebhook(HttpCase):
             sorted(inbound.mail_message_id.attachment_ids.mapped("name")),
             ["original_email.eml", "ticket.txt"],
         )
+
+    def test_webhook_reply_token_routes_to_existing_thread(self):
+        partner, outbound_message, route = self._create_thread_route(
+            company=self.company_2,
+            partner_name="Reply Token Route",
+        )
+        inbound_message_id = "<resend-http-route-token@example.com>"
+        payload = {
+            "type": "email.received",
+            "data": {
+                "email_id": "email_http_route_token",
+                "message_id": inbound_message_id,
+            },
+        }
+        headers = MailResendProviderCommon.make_webhook_headers(
+            json.dumps(payload),
+            self.account.webhook_signing_secret,
+            msg_id="msg_route_token",
+        )
+        raw_email = MailResendProviderCommon.make_raw_email(
+            to_address=route.reply_address,
+            subject=f"Re: {partner.name}",
+            message_id=inbound_message_id,
+            body="Thread token body",
+        )
+        with (
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._retrieve_received_email",
+                autospec=True,
+                return_value={
+                    "id": "email_http_route_token",
+                    "message_id": inbound_message_id,
+                    "raw": {"download_url": "https://download/raw-route-token"},
+                },
+            ),
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._download_raw_email",
+                autospec=True,
+                return_value=raw_email,
+            ),
+        ):
+            response = self._post_webhook(payload, headers)
+
+        inbound = self.env["mail.resend.inbound"].search(
+            [("resend_email_id", "=", "email_http_route_token")]
+        )
+        reply_message = self.env["mail.message"].search(
+            [("message_id", "=", inbound_message_id)],
+            limit=1,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inbound.state, "done")
+        self.assertEqual(inbound.route_id, route)
+        self.assertEqual(inbound.correlation_method, "reply_token")
+        self.assertEqual(inbound.correlated_message_id, outbound_message)
+        self.assertEqual(reply_message.model, "res.partner")
+        self.assertEqual(reply_message.res_id, partner.id)
+        self.assertEqual(reply_message.parent_id, outbound_message)
+
+    def test_webhook_provider_message_id_routes_catchall_reply(self):
+        provider_message_id = "<provider-route@example.com>"
+        partner, outbound_message, route = self._create_thread_route(
+            company=self.company_admin,
+            partner_name="Reply Provider Route",
+            provider_message_id=provider_message_id,
+        )
+        inbound_message_id = "<resend-http-provider-route@example.com>"
+        payload = {
+            "type": "email.received",
+            "data": {
+                "email_id": "email_http_provider_route",
+                "message_id": inbound_message_id,
+            },
+        }
+        headers = MailResendProviderCommon.make_webhook_headers(
+            json.dumps(payload),
+            self.account.webhook_signing_secret,
+            msg_id="msg_provider_route",
+        )
+        raw_email = MailResendProviderCommon.make_raw_email(
+            to_address=self.company_admin.catchall_email,
+            subject=f"Re: {partner.name}",
+            message_id=inbound_message_id,
+            body="Provider route body",
+            in_reply_to=provider_message_id,
+            references=provider_message_id,
+        )
+        with (
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._retrieve_received_email",
+                autospec=True,
+                return_value={
+                    "id": "email_http_provider_route",
+                    "message_id": inbound_message_id,
+                    "raw": {"download_url": "https://download/raw-provider-route"},
+                },
+            ),
+            patch(
+                "odoo.addons.mail_resend_provider.models.mail_resend_account.MailResendAccount._download_raw_email",
+                autospec=True,
+                return_value=raw_email,
+            ),
+        ):
+            response = self._post_webhook(payload, headers)
+
+        inbound = self.env["mail.resend.inbound"].search(
+            [("resend_email_id", "=", "email_http_provider_route")]
+        )
+        reply_message = self.env["mail.message"].search(
+            [("message_id", "=", inbound_message_id)],
+            limit=1,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inbound.state, "done")
+        self.assertEqual(inbound.route_id, route)
+        self.assertEqual(inbound.correlation_method, "provider_message_id")
+        self.assertEqual(inbound.correlated_message_id, outbound_message)
+        self.assertEqual(reply_message.model, "res.partner")
+        self.assertEqual(reply_message.res_id, partner.id)
+        self.assertEqual(reply_message.parent_id, outbound_message)

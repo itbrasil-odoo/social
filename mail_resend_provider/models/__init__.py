@@ -6,5 +6,6 @@ from . import mail_compose_message
 from . import mail_mail
 from . import mail_resend_account
 from . import mail_resend_inbound
+from . import mail_resend_route
 from . import res_company
 from . import res_config_settings

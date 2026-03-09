@@ -1,8 +1,10 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from unittest.mock import Mock
 
 from requests import HTTPError
 from svix.webhooks import Webhook
@@ -75,6 +77,15 @@ class MailResendProviderCommon(MailCommon):
                 }
             )
         )
+
+    @contextmanager
+    def mock_smtplib_connection(self, data_reply=None):
+        data_reply = data_reply or (250, b"Ok <resend-provider@example.com>")
+        with super().mock_smtplib_connection():
+            self.testing_smtp_session.mail = Mock(return_value=(250, b"Ok"))
+            self.testing_smtp_session.rcpt = Mock(return_value=(250, b"Accepted"))
+            self.testing_smtp_session.data = Mock(return_value=data_reply)
+            yield
 
     @staticmethod
     def make_webhook_headers(payload, secret, msg_id="msg_123", timestamp=None):

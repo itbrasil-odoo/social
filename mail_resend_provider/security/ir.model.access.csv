@@ -1,3 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_mail_resend_account_system,mail.resend.account.system,model_mail_resend_account,base.group_system,1,1,1,1
 access_mail_resend_inbound_system,mail.resend.inbound.system,model_mail_resend_inbound,base.group_system,1,1,1,1
+access_mail_resend_route_system,mail.resend.route.system,model_mail_resend_route,base.group_system,1,1,1,1
