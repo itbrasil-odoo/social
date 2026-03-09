@@ -1,0 +1,3 @@
+- Use the company settings to bind a Resend account.
+- Odoo provisions the managed SMTP server automatically.
+- Incoming Resend webhooks are routed through the native Odoo mail aliases.

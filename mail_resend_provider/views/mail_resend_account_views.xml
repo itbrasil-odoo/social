@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="mail_resend_account_view_tree" model="ir.ui.view">
+        <field name="name">mail.resend.account.view.tree</field>
+        <field name="model">mail.resend.account</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name" />
+                <field name="webhook_status" />
+                <field name="webhook_id" />
+                <field name="company_count" />
+            </list>
+        </field>
+    </record>
+
+    <record id="mail_resend_account_view_form" model="ir.ui.view">
+        <field name="name">mail.resend.account.view.form</field>
+        <field name="model">mail.resend.account</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button
+                        name="action_sync_webhook"
+                        type="object"
+                        string="Sync Webhook"
+                        class="btn-primary"
+                    />
+                    <button
+                        name="action_open_companies"
+                        type="object"
+                        string="Companies"
+                    />
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name" />
+                            <field name="active" />
+                            <field name="api_key" password="True" />
+                        </group>
+                        <group>
+                            <field name="webhook_token" />
+                            <field name="webhook_url" widget="url" />
+                            <field name="webhook_id" />
+                            <field name="webhook_signing_secret" password="True" />
+                            <field name="webhook_status" />
+                        </group>
+                    </group>
+                    <group>
+                        <field name="last_sync_error" readonly="1" />
+                    </group>
+                    <group>
+                        <field name="company_ids" readonly="1" />
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="mail_resend_account_action" model="ir.actions.act_window">
+        <field name="name">Resend Accounts</field>
+        <field name="res_model">mail.resend.account</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>
