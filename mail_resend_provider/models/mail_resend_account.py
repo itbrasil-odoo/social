@@ -13,7 +13,12 @@ from svix.webhooks import Webhook
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
+from .mail_tracking_email import RESEND_TRACKING_EVENT_TYPES
+
 _logger = logging.getLogger(__name__)
+
+# Resend webhook events the account subscribes to.
+RESEND_WEBHOOK_EVENT_TYPES = ["email.received", *RESEND_TRACKING_EVENT_TYPES]
 
 
 class MailResendAccount(models.Model):
@@ -134,7 +139,7 @@ class MailResendAccount(models.Model):
 
     def _find_or_sync_webhook(self, endpoint):
         self.ensure_one()
-        event_types = ["email.received"]
+        event_types = RESEND_WEBHOOK_EVENT_TYPES
         if self.webhook_id:
             payload = {
                 "endpoint": endpoint,
@@ -196,11 +201,22 @@ class MailResendAccount(models.Model):
                 )
             )
 
-    def _process_webhook_payload(self, payload, raw_payload):
+    def _process_webhook_payload(self, payload, raw_payload, webhook_id=False):
         self.ensure_one()
-        if payload.get("type") != "email.received":
-            return
+        event_type = payload.get("type")
+        if event_type == "email.received":
+            return self._process_inbound_payload(payload, raw_payload)
+        if event_type in RESEND_TRACKING_EVENT_TYPES:
+            return (
+                self.env["mail.tracking.email"]
+                .sudo()
+                ._resend_event_process(payload, webhook_id)
+            )
+        _logger.debug("Resend: ignoring webhook event %s", event_type)
+        return False
 
+    def _process_inbound_payload(self, payload, raw_payload):
+        self.ensure_one()
         email_id = payload["data"]["email_id"]
         inbound = (
             self.env["mail.resend.inbound"]

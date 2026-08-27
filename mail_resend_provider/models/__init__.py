@@ -7,6 +7,8 @@ from . import mail_mail
 from . import mail_resend_account
 from . import mail_resend_inbound
 from . import mail_resend_route
+from . import mail_tracking_email
+from . import mail_tracking_event
 from . import res_company
 from . import res_config_settings
 from . import res_partner
