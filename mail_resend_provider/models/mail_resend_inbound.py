@@ -78,14 +78,35 @@ class MailResendInbound(models.Model):
                     target_res_id,
                 ) = inbound._prepare_correlated_message(raw_bytes)
                 allowed_company_ids = inbound.account_id.company_ids.ids
-                inbound.env["mail.thread"].with_context(
+                mail_thread = inbound.env["mail.thread"].with_context(
                     allowed_company_ids=allowed_company_ids or inbound.env.companies.ids
-                ).sudo().message_process(
-                    target_model,
-                    raw_bytes,
-                    thread_id=target_res_id,
-                    save_original=True,
-                )
+                ).sudo()
+                try:
+                    mail_thread.message_process(
+                        target_model,
+                        raw_bytes,
+                        thread_id=target_res_id,
+                        save_original=True,
+                    )
+                except ValueError as route_error:
+                    fallback_channel = inbound.account_id.inbound_fallback_channel_id
+                    if target_model or not fallback_channel:
+                        raise
+                    _logger.info(
+                        "Resend inbound %s unmatched, routing to fallback channel %s: "
+                        "%s",
+                        inbound.resend_email_id,
+                        fallback_channel.id,
+                        route_error,
+                    )
+                    target_model = "discuss.channel"
+                    target_res_id = fallback_channel.id
+                    mail_thread.message_process(
+                        target_model,
+                        raw_bytes,
+                        thread_id=target_res_id,
+                        save_original=True,
+                    )
                 mail_message = (
                     inbound.env["mail.message"]
                     .sudo()
