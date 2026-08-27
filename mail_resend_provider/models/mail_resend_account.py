@@ -51,6 +51,12 @@ class MailResendAccount(models.Model):
     )
     company_count = fields.Integer(compute="_compute_company_count")
     webhook_url = fields.Char(compute="_compute_webhook_url")
+    inbound_fallback_channel_id = fields.Many2one(
+        "discuss.channel",
+        string="Unmatched Inbound Channel",
+        help="Optional channel where inbound emails that do not match any "
+        "record or alias are posted, instead of being discarded.",
+    )
 
     _sql_constraints = [
         (
