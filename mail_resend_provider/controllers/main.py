@@ -38,7 +38,9 @@ class MailResendProviderController(Controller):
             )
             raise BadRequest() from err
 
-        account._process_webhook_payload(payload, raw_payload)
+        account._process_webhook_payload(
+            payload, raw_payload, webhook_id=headers.get("svix-id")
+        )
         return request.make_response(
             json.dumps({}),
             [("Content-Type", "application/json")],
