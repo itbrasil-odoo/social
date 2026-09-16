@@ -1,6 +1,7 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+import json
 from email import message_from_bytes
 from unittest.mock import patch
 
@@ -177,3 +178,30 @@ class TestMailResendAccount(MailResendProviderCommon):
         self.assertIn("HTTPS webhook URL", self.resend_account.last_sync_error)
         self.assertEqual(result["tag"], "display_notification")
         request_mock.assert_not_called()
+
+    def test_verify_webhook_payload_returns_the_decoded_payload(self):
+        """Svix ``Webhook.verify`` validates and returns None.
+
+        Handing that return value straight through made every inbound email
+        answer the webhook with a 500: the caller did ``payload.get("type")``
+        on ``None``. This is exercised without HTTP on purpose, so it keeps
+        guarding the function even where HttpCase cannot reach the database.
+        """
+        payload = {"type": "email.received", "data": {"email_id": "e_1"}}
+        raw = json.dumps(payload)
+        headers = {
+            key.lower(): value
+            for key, value in self.make_webhook_headers(
+                raw, self.resend_account.webhook_signing_secret
+            ).items()
+        }
+        result = self.resend_account._verify_webhook_payload(
+            raw.encode(),
+            {
+                "svix-id": headers.get("svix-id"),
+                "svix-timestamp": headers.get("svix-timestamp"),
+                "svix-signature": headers.get("svix-signature"),
+            },
+        )
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["type"], "email.received")
