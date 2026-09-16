@@ -28,7 +28,9 @@ Mail Resend Provider
 
 |badge1| |badge2| |badge3| |badge4| |badge5|
 
-Manage outgoing email and inbound webhook processing through Resend.
+Manage outgoing email, inbound webhook processing and delivery/bounce
+tracking through Resend. Delivery status events are stored on top of the
+OCA ``mail_tracking`` infrastructure.
 
 **Table of contents**
 
@@ -51,6 +53,15 @@ Usage
 - Odoo provisions the managed SMTP server automatically.
 - Incoming Resend webhooks are routed through the native Odoo mail
   aliases.
+- Delivery status webhooks (``email.sent``, ``email.delivered``,
+  ``email.delivery_delayed``, ``email.bounced``, ``email.complained``,
+  ``email.failed``, ``email.suppressed``) are recorded as
+  ``mail.tracking.email`` events. Hard bounces, complaints and
+  suppressions flag the partner email as bounced and feed the standard
+  auto-blacklist.
+- Optionally set an *Unmatched Inbound Channel* on the Resend account so
+  inbound emails that match no record or alias are posted there instead
+  of being rejected.
 
 Bug Tracker
 ===========
