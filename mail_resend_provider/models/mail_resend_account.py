@@ -1,6 +1,7 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+import json
 import logging
 import uuid
 from email.message import EmailMessage
@@ -181,9 +182,20 @@ class MailResendAccount(models.Model):
         )
 
     def _verify_webhook_payload(self, raw_payload, headers):
+        """Check the Svix signature and return the decoded payload.
+
+        ``Webhook.verify`` validates and returns **None** — it is annotated
+        ``-> None`` and calls the inner verifier with ``json_parse=False``.
+        Returning it straight through handed ``None`` to the caller, which then
+        did ``payload.get("type")`` and answered the webhook with a 500. Svix
+        is left to do what it does well, the signature, and the decoding is
+        done here.
+        """
         self.ensure_one()
+        body = raw_payload.decode("utf-8")
         webhook = Webhook(self.webhook_signing_secret)
-        return webhook.verify(raw_payload.decode("utf-8"), headers)
+        webhook.verify(body, headers)
+        return json.loads(body)
 
     def _validate_webhook_url(self, endpoint):
         self.ensure_one()
