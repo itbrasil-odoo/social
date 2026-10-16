@@ -1,6 +1,7 @@
 # Copyright 2022 CreuBlanca
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+import copy
 import hashlib
 import hmac
 import json
@@ -217,6 +218,57 @@ class TestMailGatewayWhatsApp(MailGatewayTestCase):
         self.assertTrue(chat)
         self.assertTrue(chat.message_ids)
         return chat.message_ids
+
+    def _message_from(self, contacts, sender="34699999999"):
+        message = copy.deepcopy(self.message_01)
+        value = message["entry"][0]["changes"][0]["value"]
+        value["contacts"] = contacts
+        value["messages"][0]["from"] = sender
+        return message
+
+    def _receive_channel(self, message):
+        self.receive_message(message)
+        return self.env["discuss.channel"].search(
+            [("gateway_id", "=", self.gateway.id)]
+        )
+
+    def test_receive_message_contact_id_differs_from_sender(self):
+        # Meta: "a WhatsApp user's ID and phone number may not always match"
+        chat = self._receive_channel(
+            self._message_from([{"profile": {"name": "NAME"}, "wa_id": "3469999"}])
+        )
+        self.assertEqual(chat.name, "NAME")
+        self.assertEqual(chat.gateway_channel_token, "34699999999")
+        guest = chat.channel_member_ids.guest_id
+        self.assertEqual(guest.name, "NAME")
+
+    def test_receive_message_profile_without_name(self):
+        # Users who adopted a WhatsApp username may come without a profile name
+        chat = self._receive_channel(
+            self._message_from(
+                [{"profile": {"username": "@name"}, "wa_id": "34699999999"}]
+            )
+        )
+        self.assertEqual(chat.name, "@name")
+
+    def test_receive_message_without_contacts(self):
+        chat = self._receive_channel(self._message_from([]))
+        self.assertEqual(chat.name, "34699999999")
+
+    def test_new_channel_locks_the_gateway(self):
+        abstract = type(self.env["mail.gateway.abstract"])
+        with patch.object(
+            abstract, "_lock_channel_creation", autospec=True
+        ) as lock_mock:
+            self.receive_message(self.message_01)
+            self.assertEqual(lock_mock.call_count, 1)
+            self.set_message(self.message_01, self.webhook)
+            self.assertEqual(lock_mock.call_count, 1)
+        chat = self.env["discuss.channel"].search(
+            [("gateway_id", "=", self.gateway.id)]
+        )
+        self.assertEqual(len(chat), 1)
+        self.assertEqual(len(chat.message_ids), 2)
 
     def test_receive_message_01(self):
         message = self.receive_message(self.message_01)
