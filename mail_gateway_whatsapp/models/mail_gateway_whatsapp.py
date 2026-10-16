@@ -52,11 +52,25 @@ class MailGatewayWhatsappService(models.AbstractModel):
 
     def _get_channel_vals(self, gateway, token, update):
         result = super()._get_channel_vals(gateway, token, update)
-        for contact in update.get("contacts", []):
-            if contact["wa_id"] == token:
-                result["name"] = contact["profile"]["name"]
-                continue
+        result["name"] = self._get_contact_name(update, token)
         return result
+
+    def _get_contact(self, update, token):
+        contacts = update.get("contacts") or []
+        for contact in contacts:
+            if token in (contact.get("wa_id"), contact.get("user_id")):
+                return contact
+        # Meta warns that the wa_id of a contact and its phone number may not
+        # match. A messages webhook only describes its sender, so a single
+        # contact is the sender whatever its wa_id says.
+        if len(contacts) == 1:
+            return contacts[0]
+        return {}
+
+    def _get_contact_name(self, update, token):
+        # Users who adopted a WhatsApp username may have no profile name
+        profile = self._get_contact(update, token).get("profile") or {}
+        return profile.get("name") or profile.get("username") or str(token)
 
     def _receive_update(self, gateway, update):
         if update:
@@ -424,13 +438,11 @@ class MailGatewayWhatsappService(models.AbstractModel):
         return False
 
     def _get_author_vals(self, gateway, author_id, update):
-        for contact in update.get("contacts", []):
-            if contact["wa_id"] == author_id:
-                return {
-                    "name": contact.get("profile", {}).get("name", "Anonymous"),
-                    "gateway_id": gateway.id,
-                    "gateway_token": str(author_id),
-                }
+        return {
+            "name": self._get_contact_name(update, author_id),
+            "gateway_id": gateway.id,
+            "gateway_token": str(author_id),
+        }
 
     def _get_proxies(self):
         # This hook has been created in order to add a proxy if needed.
