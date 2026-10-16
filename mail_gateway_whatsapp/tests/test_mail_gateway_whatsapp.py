@@ -218,6 +218,21 @@ class TestMailGatewayWhatsApp(MailGatewayTestCase):
         self.assertTrue(chat.message_ids)
         return chat.message_ids
 
+    def test_new_channel_locks_the_gateway(self):
+        abstract = type(self.env["mail.gateway.abstract"])
+        with patch.object(
+            abstract, "_lock_channel_creation", autospec=True
+        ) as lock_mock:
+            self.receive_message(self.message_01)
+            self.assertEqual(lock_mock.call_count, 1)
+            self.set_message(self.message_01, self.webhook)
+            self.assertEqual(lock_mock.call_count, 1)
+        chat = self.env["discuss.channel"].search(
+            [("gateway_id", "=", self.gateway.id)]
+        )
+        self.assertEqual(len(chat), 1)
+        self.assertEqual(len(chat.message_ids), 2)
+
     def test_receive_message_01(self):
         message = self.receive_message(self.message_01)
         self.assertFalse(message.author_id)

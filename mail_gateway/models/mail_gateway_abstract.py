@@ -36,11 +36,26 @@ class MailGatewayAbstract(models.AbstractModel):
             return gateway.env["discuss.channel"].browse(chat_id)
         if not force_create and gateway.has_new_channel_security:
             return False
+        self._lock_channel_creation(gateway)
         channel = gateway.env["discuss.channel"].create(
             self._get_channel_vals(gateway, token, update)
         )
         channel._broadcast(channel.channel_member_ids.mapped("partner_id").ids)
         return channel
+
+    def _lock_channel_creation(self, gateway):
+        """Serialize the creation of channels on the gateway.
+
+        The first messages of a new contact arrive in parallel requests, and
+        none of them sees the channel the others are creating, so each one
+        creates its own. Updating the gateway row makes the later transactions
+        fail with a serialization error: Odoo replays their requests once the
+        first one commits, and the replay finds the channel.
+        """
+        gateway.env.cr.execute(
+            "UPDATE mail_gateway SET write_date = write_date WHERE id = %s",
+            [gateway.id],
+        )
 
     def _get_author(self, gateway, update):
         return False
