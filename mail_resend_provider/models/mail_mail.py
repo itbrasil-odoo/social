@@ -17,8 +17,15 @@ class MailMail(models.Model):
     def create(self, values_list):
         for values in values_list:
             company = self._resend_resolve_company_from_values(values)
+            # mail.mail delegates to mail.message (_inherits): a notification
+            # only passes mail_message_id, and the server and sender chosen
+            # by the template live on that message. Any value set here is
+            # written back onto the message, so only fill the server when
+            # the message has none.
+            message = self._resend_get_message_from_values(values)
             if (
                 not values.get("mail_server_id")
+                and not message.mail_server_id
                 and company
                 and company.resend_account_id
             ):
@@ -26,7 +33,7 @@ class MailMail(models.Model):
             server = self._resend_resolve_server_from_values(values, company=company)
             values.update(
                 self._resend_prepare_sender_values(
-                    email_from=values.get("email_from"),
+                    email_from=values.get("email_from") or message.email_from,
                     reply_to=values.get("reply_to"),
                     company=company,
                     mail_server=server,
@@ -102,9 +109,19 @@ class MailMail(models.Model):
         )
 
     @api.model
+    def _resend_get_message_from_values(self, values):
+        mail_message_id = values.get("mail_message_id")
+        if not mail_message_id:
+            return self.env["mail.message"]
+        return self.env["mail.message"].sudo().browse(mail_message_id).exists()
+
+    @api.model
     def _resend_resolve_server_from_values(self, values, company=False):
         if values.get("mail_server_id"):
             return self.env["ir.mail_server"].browse(values["mail_server_id"])
+        message = self._resend_get_message_from_values(values)
+        if message.mail_server_id:
+            return message.mail_server_id
         if company and company.resend_account_id:
             return company._ensure_resend_outgoing_server()
         return self.env["ir.mail_server"]
