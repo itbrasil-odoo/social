@@ -1,6 +1,7 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
+from email import message_from_bytes
 from email.message import EmailMessage
 from unittest.mock import patch
 
@@ -156,12 +157,55 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(
             mail.mail_server_id, self.env.company.resend_outgoing_server_id
         )
+        # The message of the thread keeps its sender; only the outgoing
+        # headers carry the verified address.
+        self.assertEqual(mail.email_from, "Billing <billing@example.com>")
+        self.assertEqual(message.email_from, "Billing <billing@example.com>")
+        sent = self._send_and_parse(mail)
         self.assertEqual(
-            mail.email_from,
+            sent["From"],
             formataddr(
                 ("Billing", self.env.company.alias_domain_id.default_from_email)
             ),
         )
+
+    def test_incoming_email_keeps_sender_when_followers_are_notified(self):
+        """A reply from a customer notified to the followers through Resend:
+        the stored message must keep the customer address."""
+        customer = self.env["res.partner"].create(
+            {"name": "Customer", "email": "customer@example.com"}
+        )
+        follower = self.env["res.partner"].create(
+            {"name": "Follower", "email": "follower@example.com"}
+        )
+        customer.message_subscribe(partner_ids=follower.ids)
+        message = customer.with_context(mail_notify_force_send=False).message_post(
+            body="<p>Received</p>",
+            message_type="email",
+            subtype_xmlid="mail.mt_comment",
+            author_id=customer.id,
+            email_from="Customer <customer@example.com>",
+        )
+        mail = (
+            self.env["mail.mail"].sudo().search([("mail_message_id", "=", message.id)])
+        )
+        self.assertTrue(mail)
+        sent = self._send_and_parse(mail)
+        message.invalidate_recordset()
+        self.assertEqual(message.email_from, "Customer <customer@example.com>")
+        self.assertEqual(
+            sent["From"],
+            formataddr(
+                ("Customer", self.env.company.alias_domain_id.default_from_email)
+            ),
+        )
+
+    def _send_and_parse(self, mail):
+        with self.mock_smtplib_connection():
+            mail.send()
+        self.assertEqual(self.testing_smtp_session.data.call_count, 1)
+        raw = self.testing_smtp_session.data.call_args[0][0]
+        return message_from_bytes(raw if isinstance(raw, bytes) else raw.encode())
 
     def _post_from(self, email_from):
         customer = self.env["res.partner"].create(
@@ -224,9 +268,8 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(
             mail.mail_server_id, self.env.company.resend_outgoing_server_id
         )
-        self.assertEqual(
-            mail.email_from, formataddr(("Billing", "odoo@mail.example.org"))
-        )
+        sent = self._send_and_parse(mail)
+        self.assertEqual(sent["From"], formataddr(("Billing", "odoo@mail.example.org")))
         reply = mail._resend_build_reply_address("abc", self.env.company)
         self.assertEqual(reply, "reply-abc@mail.example.org")
         self.assertEqual(self.env.company.alias_domain_id.name, alias_domain)

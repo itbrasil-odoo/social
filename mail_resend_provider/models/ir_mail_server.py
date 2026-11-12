@@ -207,6 +207,7 @@ class IrMailServer(models.Model):
             )
 
         smtp_from, smtp_to_list, message = self._prepare_email_message__(message, smtp)
+        self._resend_force_sender_header(message)
 
         # Do not actually send emails in testing mode (Odoo 19 API).
         if self._disable_send():
@@ -237,6 +238,29 @@ class IrMailServer(models.Model):
                 self.env._("Mail Delivery Failed"), error_message
             ) from err
         return provider_message_id or message_id
+
+    def _resend_force_sender_header(self, message):
+        """Puts the verified Resend address in the From header, keeping the
+        sender name, and the original sender in Reply-To when there is none.
+
+        Done on the outgoing message only, like Odoo does when it encapsulates
+        a sender: the mail.message keeps who really wrote it.
+        """
+        self.ensure_one()
+        original_from = message["From"]
+        if not original_from:
+            return message
+        mail_model = self.env["mail.mail"]
+        company = self.sudo().resend_company_id or self.env.company
+        verified_sender_email = mail_model._resend_get_verified_sender_email(company)
+        forced_from = mail_model._resend_format_email_from(
+            original_from, verified_sender_email
+        )
+        if forced_from != original_from:
+            message.replace_header("From", forced_from)
+            if not message["Reply-To"]:
+                message["Reply-To"] = original_from
+        return message
 
     def _resend_smtp_send_message(self, smtp, message, smtp_from, smtp_to_list):
         code, reply = smtp.mail(smtp_from)

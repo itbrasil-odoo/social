@@ -41,6 +41,10 @@ class MailMail(models.Model):
                     company=company,
                     mail_server=server,
                     threadable=self._resend_is_threadable_values(values),
+                    # A notification shares its mail.message with the thread:
+                    # whatever is written here lands on that message, so the
+                    # sender is only replaced in the outgoing headers.
+                    keep_sender=bool(message),
                 )
             )
         records = super().create(values_list)
@@ -224,7 +228,15 @@ class MailMail(models.Model):
         company=False,
         mail_server=False,
         threadable=False,
+        keep_sender=False,
     ):
+        """Values that put the verified Resend address in the From.
+
+        With ``keep_sender`` nothing is returned (the sender of a notification
+        belongs to the message of the thread, e.g. the customer who wrote in):
+        ``ir.mail_server`` replaces it in the outgoing headers instead. The
+        configuration is checked either way.
+        """
         mail_server = mail_server.sudo() if mail_server else mail_server
         company = self._resend_get_sender_company(
             company=company,
@@ -233,6 +245,8 @@ class MailMail(models.Model):
         if not mail_server or not mail_server.resend_managed:
             return {}
         verified_sender_email = self._resend_get_verified_sender_email(company)
+        if keep_sender:
+            return {}
         forced_email_from = self._resend_format_email_from(
             email_from,
             verified_sender_email,
@@ -438,6 +452,7 @@ class MailMail(models.Model):
                 company=mail._resend_get_company(),
                 mail_server=mail.mail_server_id,
                 threadable=mail._resend_is_threadable_mail(),
+                keep_sender=mail.is_notification,
             )
             if values:
                 mail.write(values)
