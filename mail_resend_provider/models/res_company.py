@@ -1,7 +1,7 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from odoo import _, fields, models
+from odoo import fields, models
 
 
 class ResCompany(models.Model):
@@ -9,12 +9,10 @@ class ResCompany(models.Model):
 
     resend_account_id = fields.Many2one(
         "mail.resend.account",
-        string="Resend Account",
         ondelete="set null",
     )
     resend_outgoing_server_id = fields.Many2one(
         "ir.mail_server",
-        string="Resend Outgoing Server",
         readonly=True,
         ondelete="set null",
         copy=False,
@@ -49,7 +47,7 @@ class ResCompany(models.Model):
             )
         if server:
             server.active = False
-            server.name = _("%s (disabled)", server.name)
+            server.name = self.env._("%s (disabled)", server.name)
         self.resend_outgoing_server_id = False
         if previous_account and previous_account.company_ids:
             previous_account.company_ids._ensure_resend_outgoing_server()
@@ -74,7 +72,7 @@ class ResCompany(models.Model):
                     )
                 )
             values = {
-                "name": _("Resend SMTP - %s", company.display_name),
+                "name": self.env._("Resend SMTP - %s", company.display_name),
                 "smtp_authentication": "resend",
                 "smtp_host": "smtp.resend.com",
                 "smtp_port": 587,

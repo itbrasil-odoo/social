@@ -1,7 +1,7 @@
 # Copyright 2026 IT Brasil, Renan Teixeira
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from odoo import _, fields, models
+from odoo import fields, models
 from odoo.exceptions import UserError
 
 
@@ -36,7 +36,7 @@ class ResConfigSettings(models.TransientModel):
     def action_sync_resend_webhook(self):
         self.ensure_one()
         if not self.resend_account_id:
-            raise UserError(_("Please configure a Resend account first."))
+            raise UserError(self.env._("Please configure a Resend account first."))
         self.company_id._ensure_resend_outgoing_server()
         result = self.resend_account_id.action_sync_webhook()
         if isinstance(result, dict):
