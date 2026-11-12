@@ -28,6 +28,9 @@ class MailMail(models.Model):
                 and not message.mail_server_id
                 and company
                 and company.resend_account_id
+                and not self._resend_sender_has_own_server(
+                    values.get("email_from") or message.email_from, company
+                )
             ):
                 values["mail_server_id"] = company._ensure_resend_outgoing_server().id
             server = self._resend_resolve_server_from_values(values, company=company)
@@ -123,9 +126,48 @@ class MailMail(models.Model):
         message = self._resend_get_message_from_values(values)
         if message.mail_server_id:
             return message.mail_server_id
-        if company and company.resend_account_id:
+        if (
+            company
+            and company.resend_account_id
+            and not self._resend_sender_has_own_server(
+                values.get("email_from") or message.email_from, company
+            )
+        ):
             return company._ensure_resend_outgoing_server()
         return self.env["ir.mail_server"]
+
+    @api.model
+    def _resend_sender_has_own_server(self, email_from, company=False):
+        """Whether the sender has its own outgoing server, other than Resend.
+
+        Only a server set for the exact sender address counts (e.g. users with
+        their own SMTP account): it keeps sending that sender's emails. A
+        server for a whole domain does not, so notifications still go through
+        Resend, and neither does the Resend sender address itself.
+        """
+        email = tools.email_normalize(email_from or "", strict=False)
+        if not email:
+            return False
+        account = company.sudo().resend_account_id if company else False
+        if account:
+            resend_sender = tools.email_normalize(
+                account.sender_email
+                or company.alias_domain_id.default_from_email
+                or "",
+                strict=False,
+            )
+            if email == resend_sender:
+                return False
+        servers = (
+            self.env["ir.mail_server"]
+            .sudo()
+            .search([("resend_managed", "=", False), ("from_filter", "ilike", "@")])
+        )
+        for server in servers:
+            for item in (server.from_filter or "").split(","):
+                if "@" in item and tools.email_normalize(item.strip()) == email:
+                    return True
+        return False
 
     @api.model
     def _resend_get_sender_company(self, company=False, mail_server=False):
@@ -143,7 +185,11 @@ class MailMail(models.Model):
                     "Unable to determine the company for the Resend outgoing email."
                 )
             )
-        sender_email = company.alias_domain_id.default_from_email
+        # sudo: the Resend account is restricted to administrators.
+        sender_email = (
+            company.sudo().resend_account_id.sender_email
+            or company.alias_domain_id.default_from_email
+        )
         if not sender_email:
             raise UserError(
                 self.env._(
@@ -234,13 +280,12 @@ class MailMail(models.Model):
 
     @api.model
     def _resend_build_reply_address(self, token, company):
-        return (
-            tools.email_normalize(
-                f"reply-{token}@{company.alias_domain_id.name}",
-                strict=False,
-            )
-            or f"reply-{token}@{company.alias_domain_id.name}"
+        domain = (
+            company.sudo().resend_account_id.sender_domain
+            or company.alias_domain_id.name
         )
+        address = f"reply-{token}@{domain}"
+        return tools.email_normalize(address, strict=False) or address
 
     def _resend_is_threadable_mail(self):
         self.ensure_one()
@@ -379,7 +424,9 @@ class MailMail(models.Model):
 
     def _resend_prepare_outgoing_mails(self):
         for mail in self:
-            if not mail.mail_server_id:
+            if not mail.mail_server_id and not self._resend_sender_has_own_server(
+                mail.email_from, mail._resend_get_company()
+            ):
                 company = mail._resend_get_company()
                 if company and company.resend_account_id:
                     mail.mail_server_id = company._ensure_resend_outgoing_server()
@@ -397,7 +444,12 @@ class MailMail(models.Model):
             mail._resend_ensure_route()
 
     def _assign_resend_outgoing_server(self):
-        for mail in self.filtered(lambda record: not record.mail_server_id):
+        for mail in self.filtered(
+            lambda record: not record.mail_server_id
+            and not self._resend_sender_has_own_server(
+                record.email_from, record._resend_get_company()
+            )
+        ):
             company = mail._resend_get_company()
             if company and company.resend_account_id:
                 mail.mail_server_id = company._ensure_resend_outgoing_server()

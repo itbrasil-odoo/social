@@ -37,6 +37,12 @@
                             <field name="name" />
                             <field name="active" />
                             <field name="api_key" password="True" />
+                            <field
+                                name="sender_domain"
+                                placeholder="mail.example.com"
+                            />
+                            <field name="sender_alias" invisible="not sender_domain" />
+                            <field name="sender_email" invisible="not sender_domain" />
                         </group>
                         <group>
                             <field name="webhook_token" />

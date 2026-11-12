@@ -52,6 +52,16 @@ class MailResendAccount(models.Model):
     )
     company_count = fields.Integer(compute="_compute_company_count")
     webhook_url = fields.Char(compute="_compute_webhook_url")
+    sender_domain = fields.Char(
+        help="Domain verified on Resend for sending and receiving, e.g. "
+        "mail.example.com. The sender and the per-conversation reply addresses "
+        "use it. When empty, the email alias domain of the company is used.",
+    )
+    sender_alias = fields.Char(
+        default="notifications",
+        help="Left part of the sender address on the sender domain.",
+    )
+    sender_email = fields.Char(compute="_compute_sender_email")
     inbound_fallback_channel_id = fields.Many2one(
         "discuss.channel",
         string="Unmatched Inbound Channel",
@@ -215,6 +225,13 @@ class MailResendAccount(models.Model):
                     endpoint,
                 )
             )
+
+    @api.depends("sender_domain", "sender_alias")
+    def _compute_sender_email(self):
+        for account in self:
+            domain = (account.sender_domain or "").strip().lower()
+            alias = (account.sender_alias or "").strip()
+            account.sender_email = f"{alias}@{domain}" if domain and alias else False
 
     def _process_webhook_payload(self, payload, raw_payload, webhook_id=False):
         self.ensure_one()

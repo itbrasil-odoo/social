@@ -12,8 +12,14 @@ class MailComposeMessage(models.TransientModel):
     @api.depends("template_id", "record_company_id")
     def _compute_mail_server_id(self):
         result = super()._compute_mail_server_id()
+        mail_model = self.env["mail.mail"]
         for composer in self.filtered(lambda wizard: not wizard.template_id):
             company = composer.record_company_id or composer.env.company
+            # Users with their own outgoing server keep sending through it.
+            if mail_model._resend_sender_has_own_server(
+                composer.env.user.partner_id.email, company
+            ):
+                continue
             composer.mail_server_id = company.resend_outgoing_server_id
         return result
 

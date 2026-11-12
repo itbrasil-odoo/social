@@ -128,9 +128,7 @@ class TestMailResendOutbound(MailResendProviderCommon):
             mail_server_id=manual_server.id,
         )
         mail = (
-            self.env["mail.mail"]
-            .sudo()
-            .search([("mail_message_id", "=", message.id)])
+            self.env["mail.mail"].sudo().search([("mail_message_id", "=", message.id)])
         )
         self.assertTrue(mail)
         self.assertEqual(mail.mail_server_id, manual_server)
@@ -138,9 +136,7 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(message.mail_server_id, manual_server)
         self.assertEqual(message.email_from, "Billing <billing@example.com>")
         self.assertFalse(
-            self.env["mail.resend.route"].search(
-                [("mail_message_id", "=", message.id)]
-            )
+            self.env["mail.resend.route"].search([("mail_message_id", "=", message.id)])
         )
 
     def test_notification_without_server_uses_resend(self):
@@ -155,9 +151,7 @@ class TestMailResendOutbound(MailResendProviderCommon):
             email_from="Billing <billing@example.com>",
         )
         mail = (
-            self.env["mail.mail"]
-            .sudo()
-            .search([("mail_message_id", "=", message.id)])
+            self.env["mail.mail"].sudo().search([("mail_message_id", "=", message.id)])
         )
         self.assertEqual(
             mail.mail_server_id, self.env.company.resend_outgoing_server_id
@@ -168,6 +162,74 @@ class TestMailResendOutbound(MailResendProviderCommon):
                 ("Billing", self.env.company.alias_domain_id.default_from_email)
             ),
         )
+
+    def _post_from(self, email_from):
+        customer = self.env["res.partner"].create(
+            {"name": "Customer", "email": "customer@example.com"}
+        )
+        message = customer.with_context(mail_notify_force_send=False).message_post(
+            body="<p>Hello</p>",
+            message_type="comment",
+            subtype_xmlid="mail.mt_comment",
+            partner_ids=customer.ids,
+            email_from=email_from,
+        )
+        return (
+            self.env["mail.mail"].sudo().search([("mail_message_id", "=", message.id)])
+        )
+
+    def test_sender_with_own_server_keeps_it(self):
+        """A sender with its own outgoing server is not moved to Resend."""
+        self.env["ir.mail_server"].create(
+            {
+                "name": "Own SMTP",
+                "smtp_host": "smtp.own.example.org",
+                "from_filter": "owner@own.example.org",
+            }
+        )
+        mail = self._post_from("Owner <owner@own.example.org>")
+        self.assertFalse(mail.mail_server_id.resend_managed)
+        self.assertEqual(mail.email_from, "Owner <owner@own.example.org>")
+        # Another sender of the same domain has no server: Resend.
+        mail = self._post_from("Other <other@own.example.org>")
+        self.assertEqual(
+            mail.mail_server_id, self.env.company.resend_outgoing_server_id
+        )
+
+    def test_domain_server_does_not_take_senders_off_resend(self):
+        """Only a server for the exact sender address keeps it; a server for a
+        whole domain does not, so notifications still go through Resend."""
+        self.env["ir.mail_server"].create(
+            {
+                "name": "Domain SMTP",
+                "smtp_host": "smtp.domain.example.org",
+                "from_filter": "domain.example.org",
+            }
+        )
+        mail = self._post_from("Anyone <anyone@domain.example.org>")
+        self.assertEqual(
+            mail.mail_server_id, self.env.company.resend_outgoing_server_id
+        )
+
+    def test_account_sender_domain(self):
+        """The sender domain of the account replaces the company alias domain
+        for the Resend sender and the reply addresses, which keep working
+        without changing the email alias domain of the company."""
+        alias_domain = self.env.company.alias_domain_id.name
+        self.resend_account.write(
+            {"sender_domain": "mail.example.org", "sender_alias": "odoo"}
+        )
+        self.assertEqual(self.resend_account.sender_email, "odoo@mail.example.org")
+        mail = self._post_from("Billing <billing@example.com>")
+        self.assertEqual(
+            mail.mail_server_id, self.env.company.resend_outgoing_server_id
+        )
+        self.assertEqual(
+            mail.email_from, formataddr(("Billing", "odoo@mail.example.org"))
+        )
+        reply = mail._resend_build_reply_address("abc", self.env.company)
+        self.assertEqual(reply, "reply-abc@mail.example.org")
+        self.assertEqual(self.env.company.alias_domain_id.name, alias_domain)
 
     def test_mail_create_keeps_explicit_reply_to(self):
         mail = self.env["mail.mail"].create(

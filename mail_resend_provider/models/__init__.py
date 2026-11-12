@@ -2,7 +2,6 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
 from . import ir_mail_server
-from . import mail_compose_message
 from . import mail_mail
 from . import mail_resend_account
 from . import mail_resend_inbound
