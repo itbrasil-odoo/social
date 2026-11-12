@@ -4,7 +4,7 @@
 import re
 import uuid
 
-from odoo import _, api, models, tools
+from odoo import api, models, tools
 from odoo.exceptions import UserError
 
 MESSAGE_ID_PATTERN = re.compile(r"<[^<>\s]+>")
@@ -62,13 +62,14 @@ class MailMail(models.Model):
         )
 
     def _postprocess_sent_message(
-        self, success_pids, failure_reason=False, failure_type=None
+        self, success_pids, success_emails, failure_reason=False, failure_type=None
     ):
         self.exists().filtered(
             lambda mail: mail.state == "sent" and mail.mail_server_id.resend_managed
         )._resend_mark_routes_sent()
         return super()._postprocess_sent_message(
-            success_pids=success_pids,
+            success_pids,
+            success_emails,
             failure_reason=failure_reason,
             failure_type=failure_type,
         )
@@ -90,7 +91,7 @@ class MailMail(models.Model):
             mail_message = mail_message.browse(values["mail_message_id"])
             return bool(
                 mail_message.exists()
-                and mail_message.is_thread_message()
+                and mail_message._is_thread_message_visible()
                 and not mail_message.reply_to_force_new
             )
         return bool(
@@ -138,12 +139,14 @@ class MailMail(models.Model):
         company = self._resend_get_sender_company(company=company)
         if not company:
             raise UserError(
-                _("Unable to determine the company for the Resend outgoing email.")
+                self.env._(
+                    "Unable to determine the company for the Resend outgoing email."
+                )
             )
         sender_email = company.alias_domain_id.default_from_email
         if not sender_email:
             raise UserError(
-                _(
+                self.env._(
                     "Company %(company)s must have an email alias domain with a "
                     "Default From email to send messages through Resend.",
                     company=company.display_name,

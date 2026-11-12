@@ -11,15 +11,15 @@ import requests
 from requests import HTTPError
 from svix.webhooks import Webhook
 
-from odoo import _, api, fields, models
+from odoo import api, fields, models
 from odoo.exceptions import UserError
-
-from .mail_tracking_email import RESEND_TRACKING_EVENT_TYPES
 
 _logger = logging.getLogger(__name__)
 
-# Resend webhook events the account subscribes to.
-RESEND_WEBHOOK_EVENT_TYPES = ["email.received", *RESEND_TRACKING_EVENT_TYPES]
+# Resend webhook events the account subscribes to. Delivery status events
+# (sent, delivered, bounced...) are added by mail_resend_provider_tracking,
+# which stores them on top of the OCA mail_tracking module.
+RESEND_WEBHOOK_EVENT_TYPES = ["email.received"]
 
 
 class MailResendAccount(models.Model):
@@ -59,13 +59,10 @@ class MailResendAccount(models.Model):
         "record or alias are posted, instead of being discarded.",
     )
 
-    _sql_constraints = [
-        (
-            "mail_resend_account_webhook_token_uniq",
-            "unique(webhook_token)",
-            "Webhook token must be unique.",
-        ),
-    ]
+    _webhook_token_uniq = models.Constraint(
+        "unique(webhook_token)",
+        "Webhook token must be unique.",
+    )
 
     def _compute_webhook_url(self):
         for account in self:
@@ -110,7 +107,7 @@ class MailResendAccount(models.Model):
                     "type": "ir.actions.client",
                     "tag": "display_notification",
                     "params": {
-                        "title": _("Resend webhook sync failed"),
+                        "title": self.env._("Resend webhook sync failed"),
                         "message": str(err),
                         "type": "danger",
                         "sticky": True,
@@ -122,7 +119,7 @@ class MailResendAccount(models.Model):
     def action_open_companies(self):
         self.ensure_one()
         return {
-            "name": _("Companies"),
+            "name": self.env._("Companies"),
             "type": "ir.actions.act_window",
             "res_model": "res.company",
             "view_mode": "list,form",
@@ -146,7 +143,7 @@ class MailResendAccount(models.Model):
 
     def _find_or_sync_webhook(self, endpoint):
         self.ensure_one()
-        event_types = RESEND_WEBHOOK_EVENT_TYPES
+        event_types = self._resend_webhook_event_types()
         if self.webhook_id:
             payload = {
                 "endpoint": endpoint,
@@ -201,7 +198,7 @@ class MailResendAccount(models.Model):
         self.ensure_one()
         if not endpoint:
             raise UserError(
-                _(
+                self.env._(
                     "Missing webhook URL. Configure `web.base.url` before syncing "
                     "the Resend webhook."
                 )
@@ -209,10 +206,10 @@ class MailResendAccount(models.Model):
 
         parsed = urlsplit(endpoint)
         if not parsed.scheme or not parsed.netloc:
-            raise UserError(_("Invalid webhook URL for Resend: %s", endpoint))
+            raise UserError(self.env._("Invalid webhook URL for Resend: %s", endpoint))
         if parsed.scheme != "https":
             raise UserError(
-                _(
+                self.env._(
                     "Resend requires a publicly accessible HTTPS webhook URL. "
                     "Update `web.base.url` to HTTPS before syncing. Current URL: %s",
                     endpoint,
@@ -224,13 +221,28 @@ class MailResendAccount(models.Model):
         event_type = payload.get("type")
         if event_type == "email.received":
             return self._process_inbound_payload(payload, raw_payload)
-        if event_type in RESEND_TRACKING_EVENT_TYPES:
-            return (
-                self.env["mail.tracking.email"]
-                .sudo()
-                ._resend_event_process(payload, webhook_id)
-            )
+        if event_type in self._resend_webhook_event_types():
+            return self._resend_process_delivery_event(payload, webhook_id)
         _logger.debug("Resend: ignoring webhook event %s", event_type)
+        return False
+
+    def _resend_webhook_event_types(self):
+        """Resend webhook events this account subscribes to.
+
+        Extended by ``mail_resend_provider_tracking`` with the delivery status
+        events.
+        """
+        return list(RESEND_WEBHOOK_EVENT_TYPES)
+
+    def _resend_process_delivery_event(self, payload, webhook_id=False):
+        """Hook for delivery status events (sent, delivered, bounced...).
+
+        This module does not subscribe to them; ``mail_resend_provider_tracking``
+        does, and stores them as ``mail.tracking.event``.
+        """
+        _logger.debug(
+            "Resend: delivery event %s without a tracking module", payload.get("type")
+        )
         return False
 
     def _process_inbound_payload(self, payload, raw_payload):
@@ -291,7 +303,7 @@ class MailResendAccount(models.Model):
                 )
             if response_payload:
                 detail = response_payload.get("message") or detail
-            raise UserError(_("Resend API error: %s", detail)) from err
+            raise UserError(self.env._("Resend API error: %s", detail)) from err
         if not response.content:
             return {}
         return response.json()

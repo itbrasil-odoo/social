@@ -51,13 +51,10 @@ class MailResendInbound(models.Model):
     target_model = fields.Char(readonly=True, copy=False)
     target_res_id = fields.Integer(readonly=True, copy=False)
 
-    _sql_constraints = [
-        (
-            "mail_resend_inbound_account_email_uniq",
-            "unique(account_id, resend_email_id)",
-            "Received email must be unique per Resend account.",
-        )
-    ]
+    _account_email_uniq = models.Constraint(
+        "unique(account_id, resend_email_id)",
+        "Received email must be unique per Resend account.",
+    )
 
     def _process(self):
         for inbound in self:
@@ -78,9 +75,14 @@ class MailResendInbound(models.Model):
                     target_res_id,
                 ) = inbound._prepare_correlated_message(raw_bytes)
                 allowed_company_ids = inbound.account_id.company_ids.ids
-                mail_thread = inbound.env["mail.thread"].with_context(
-                    allowed_company_ids=allowed_company_ids or inbound.env.companies.ids
-                ).sudo()
+                mail_thread = (
+                    inbound.env["mail.thread"]
+                    .with_context(
+                        allowed_company_ids=allowed_company_ids
+                        or inbound.env.companies.ids
+                    )
+                    .sudo()
+                )
                 try:
                     mail_thread.message_process(
                         target_model,

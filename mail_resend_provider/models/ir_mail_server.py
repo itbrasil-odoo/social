@@ -4,7 +4,7 @@
 import re
 import smtplib
 
-from odoo import _, api, fields, models, modules, tools
+from odoo import api, fields, models, tools
 from odoo.exceptions import UserError
 
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
@@ -20,7 +20,6 @@ class IrMailServer(models.Model):
     resend_managed = fields.Boolean(copy=False, readonly=True)
     resend_account_id = fields.Many2one(
         "mail.resend.account",
-        string="Resend Account",
         ondelete="set null",
         readonly=True,
         copy=False,
@@ -38,7 +37,7 @@ class IrMailServer(models.Model):
         resend_servers = self.filtered(
             lambda server: server.smtp_authentication == "resend"
         )
-        resend_servers.smtp_authentication_info = _(
+        resend_servers.smtp_authentication_info = self.env._(
             "Use Resend SMTP with an API key as the password. The managed "
             "configuration uses smtp.resend.com with STARTTLS on port 587."
         )
@@ -83,14 +82,14 @@ class IrMailServer(models.Model):
         for server in resend_servers:
             if server.smtp_host != "smtp.resend.com":
                 raise UserError(
-                    _(
+                    self.env._(
                         'Incorrect SMTP server for Resend mail server "%s".',
                         server.name,
                     )
                 )
             if server.smtp_encryption != "starttls":
                 raise UserError(
-                    _(
+                    self.env._(
                         'Incorrect Connection Security for Resend mail server "%s". '
                         'Please set it to "TLS (STARTTLS)".',
                         server.name,
@@ -98,7 +97,7 @@ class IrMailServer(models.Model):
                 )
             if server.smtp_port != 587:
                 raise UserError(
-                    _(
+                    self.env._(
                         'Incorrect SMTP port for Resend mail server "%s". '
                         "Please set it to 587.",
                         server.name,
@@ -106,7 +105,7 @@ class IrMailServer(models.Model):
                 )
             if server.smtp_user != "resend":
                 raise UserError(
-                    _(
+                    self.env._(
                         'Incorrect username for Resend mail server "%s". '
                         'Please set it to "resend".',
                         server.name,
@@ -114,7 +113,7 @@ class IrMailServer(models.Model):
                 )
             if not server.smtp_pass:
                 raise UserError(
-                    _(
+                    self.env._(
                         "Please configure the Resend API key on mail server “%s”.",
                         server.name,
                     )
@@ -172,7 +171,7 @@ class IrMailServer(models.Model):
                 )
             if translated_error:
                 raise MailDeliveryException(
-                    _("Mail Delivery Failed"),
+                    self.env._("Mail Delivery Failed"),
                     translated_error,
                 ) from err
             raise
@@ -194,7 +193,7 @@ class IrMailServer(models.Model):
         self.ensure_one()
         smtp = smtp_session
         if not smtp:
-            smtp = self.connect(
+            smtp = self._connect__(
                 smtp_server,
                 smtp_port,
                 smtp_user,
@@ -207,9 +206,10 @@ class IrMailServer(models.Model):
                 mail_server_id=mail_server_id,
             )
 
-        smtp_from, smtp_to_list, message = self._prepare_email_message(message, smtp)
+        smtp_from, smtp_to_list, message = self._prepare_email_message__(message, smtp)
 
-        if modules.module.current_test:
+        # Do not actually send emails in testing mode (Odoo 19 API).
+        if self._disable_send():
             return message["Message-Id"]
 
         server_name = smtp_server or self.smtp_host
@@ -226,7 +226,7 @@ class IrMailServer(models.Model):
         except smtplib.SMTPServerDisconnected:
             raise
         except Exception as err:
-            error_message = _(
+            error_message = self.env._(
                 "Mail delivery failed via SMTP server '%(server)s'.\n"
                 "%(exception_name)s: %(message)s",
                 server=server_name,
@@ -234,7 +234,7 @@ class IrMailServer(models.Model):
                 message=err,
             )
             raise MailDeliveryException(
-                _("Mail Delivery Failed"), error_message
+                self.env._("Mail Delivery Failed"), error_message
             ) from err
         return provider_message_id or message_id
 
@@ -296,7 +296,7 @@ class IrMailServer(models.Model):
         )
         sender_domain = tools.email_domain_extract(sender_email)
         if sender_domain:
-            return _(
+            return self.env._(
                 "Resend rejected the email because the sender domain %(domain)s "
                 "is not verified for the From address %(email_from)s. Verify "
                 "this exact domain or subdomain in Resend Domains before "
@@ -304,7 +304,7 @@ class IrMailServer(models.Model):
                 domain=sender_domain,
                 email_from=sender_email,
             )
-        return _(
+        return self.env._(
             "Resend rejected the email because the sender address %(email_from)s "
             "does not use a verified domain. Verify the exact domain in Resend "
             "Domains before sending: https://resend.com/domains",

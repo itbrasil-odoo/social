@@ -1,3 +1,6 @@
-Manage outgoing email, inbound webhook processing and delivery/bounce tracking
-through Resend. Delivery status events are stored on top of the OCA
-``mail_tracking`` infrastructure.
+Manage outgoing email and inbound webhook processing through Resend.
+
+Delivery status events (sent, delivered, bounced...) are stored by the
+`mail_resend_provider_tracking` module, on top of the OCA `mail_tracking`
+infrastructure. Without it, the Resend webhook only subscribes to received
+emails.

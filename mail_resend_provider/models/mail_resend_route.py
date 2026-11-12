@@ -37,15 +37,11 @@ class MailResendRoute(models.Model):
         copy=False,
     )
 
-    _sql_constraints = [
-        (
-            "mail_resend_route_mail_message_uniq",
-            "unique(mail_message_id)",
-            "A Resend route already exists for this message.",
-        ),
-        (
-            "mail_resend_route_reply_token_uniq",
-            "unique(reply_token)",
-            "Reply token must be unique.",
-        ),
-    ]
+    _mail_message_uniq = models.Constraint(
+        "unique(mail_message_id)",
+        "A Resend route already exists for this message.",
+    )
+    _reply_token_uniq = models.Constraint(
+        "unique(reply_token)",
+        "Reply token must be unique.",
+    )

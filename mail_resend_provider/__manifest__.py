@@ -4,12 +4,12 @@
 {
     "name": "Mail Resend Provider",
     "summary": "Send and receive emails through Resend",
-    "version": "18.0.1.1.2",
+    "version": "19.0.1.0.0",
     "category": "Discuss",
     "license": "AGPL-3",
     "author": "Odoo Community Association (OCA), IT Brasil, Renan Teixeira",
     "website": "https://github.com/OCA/social",
-    "depends": ["mail", "mail_tracking"],
+    "depends": ["mail"],
     "external_dependencies": {"python": ["svix"]},
     "data": [
         "security/ir.model.access.csv",
