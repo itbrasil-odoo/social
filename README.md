@@ -1,4 +1,7 @@
 
+[![Support the OCA](https://odoo-community.org/readme-banner-image)](https://odoo-community.org/get-involved?utm_source=repo-readme)
+
+# social
 [![Runboat](https://img.shields.io/badge/runboat-Try%20me-875A7B.png)](https://runboat.odoo-community.org/builds?repo=OCA/social&target_branch=19.0)
 [![Pre-commit Status](https://github.com/OCA/social/actions/workflows/pre-commit.yml/badge.svg?branch=19.0)](https://github.com/OCA/social/actions/workflows/pre-commit.yml?query=branch%3A19.0)
 [![Build Status](https://github.com/OCA/social/actions/workflows/test.yml/badge.svg?branch=19.0)](https://github.com/OCA/social/actions/workflows/test.yml?query=branch%3A19.0)
@@ -6,8 +9,6 @@
 [![Translation Status](https://translation.odoo-community.org/widgets/social-19-0/-/svg-badge.svg)](https://translation.odoo-community.org/engage/social-19-0/?utm_source=widget)
 
 <!-- /!\ do not modify above this line -->
-
-# social
 
 social
 
@@ -17,7 +18,11 @@ social
 
 [//]: # (addons)
 
-This part will be replaced when running the oca-gen-addons-table script from OCA/maintainer-tools.
+Available addons
+----------------
+addon | version | maintainers | summary
+--- | --- | --- | ---
+[mute_notification_user_autosubscribe](mute_notification_user_autosubscribe/) | 19.0.1.0.0 |  | Do not send notifications to users autosubcribed through user_id field
 
 [//]: # (end addons)
 

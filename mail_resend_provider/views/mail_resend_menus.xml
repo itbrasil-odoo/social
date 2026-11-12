@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <menuitem
+        id="mail_resend_account_menu"
+        name="Resend Accounts"
+        parent="base.menu_email"
+        action="mail_resend_account_action"
+        sequence="65"
+        groups="base.group_system"
+    />
+</odoo>
