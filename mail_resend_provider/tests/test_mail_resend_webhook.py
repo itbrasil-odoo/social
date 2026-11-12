@@ -520,6 +520,86 @@ class TestMailResendWebhook(HttpCase):
         self.assertEqual(reply_message.res_id, partner.id)
         self.assertEqual(reply_message.parent_id, outbound_message)
 
+    def test_webhook_reply_to_from_address_uses_delivered_message_id(self):
+        """Resend replaced the Message-ID on delivery and the recipient replied
+        to the From address: the delivery is resolved on the spot and the
+        reply reaches the thread."""
+        partner, outbound_message, route = self._create_thread_route(
+            company=self.company_admin,
+            partner_name="Reply From Address",
+        )
+        delivery = self.env["mail.resend.delivery"].create(
+            {
+                "route_id": route.id,
+                "account_id": self.account.id,
+                "resend_email_id": "01a1cd8b-3cd1-783c-9015-8bf57e8820d9",
+                "recipient_emails": "sender@example.com",
+            }
+        )
+        ses_message_id = "<0103-delivered@sa-east-1.amazonses.com>"
+        inbound_message_id = "<resend-http-from-address@example.com>"
+        payload = {
+            "type": "email.received",
+            "data": {
+                "email_id": "email_http_from_address",
+                "message_id": inbound_message_id,
+            },
+        }
+        headers = MailResendProviderCommon.make_webhook_headers(
+            json.dumps(payload),
+            self.account.webhook_signing_secret,
+            msg_id="msg_from_address",
+        )
+        raw_email = MailResendProviderCommon.make_raw_email(
+            to_address=self.company_admin.alias_domain_id.default_from_email,
+            subject=f"Re: {partner.name}",
+            message_id=inbound_message_id,
+            body="Reply to the From address",
+            in_reply_to=ses_message_id,
+            references=ses_message_id,
+        )
+        account_path = (
+            "odoo.addons.mail_resend_provider.models.mail_resend_account."
+            "MailResendAccount."
+        )
+        with (
+            patch(
+                account_path + "_retrieve_received_email",
+                autospec=True,
+                return_value={
+                    "id": "email_http_from_address",
+                    "message_id": inbound_message_id,
+                    "raw": {"download_url": "https://download/raw-from-address"},
+                },
+            ),
+            patch(
+                account_path + "_download_raw_email",
+                autospec=True,
+                return_value=raw_email,
+            ),
+            patch(
+                account_path + "_resend_request",
+                autospec=True,
+                return_value={"message_id": ses_message_id},
+            ),
+        ):
+            response = self._post_webhook(payload, headers)
+
+        inbound = self.env["mail.resend.inbound"].search(
+            [("resend_email_id", "=", "email_http_from_address")]
+        )
+        reply_message = self.env["mail.message"].search(
+            [("message_id", "=", inbound_message_id)], limit=1
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inbound.state, "done")
+        self.assertEqual(inbound.route_id, route)
+        self.assertEqual(inbound.correlation_method, "provider_message_id")
+        self.assertEqual(delivery.provider_message_id, ses_message_id)
+        self.assertEqual(reply_message.model, "res.partner")
+        self.assertEqual(reply_message.res_id, partner.id)
+        self.assertEqual(reply_message.parent_id, outbound_message)
+
     def test_webhook_references_route_reply_to_default_from_natively(self):
         provider_message_id = "<provider-native-route@example.com>"
         partner, outbound_message, route = self._create_thread_route(

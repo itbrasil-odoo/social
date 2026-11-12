@@ -9,6 +9,10 @@ from odoo.exceptions import UserError
 
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
 
+RESEND_EMAIL_ID_PATTERN = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE
+)
+
 
 class IrMailServer(models.Model):
     _inherit = "ir.mail_server"
@@ -281,7 +285,41 @@ class IrMailServer(models.Model):
         code, reply = smtp.data(message.as_bytes())
         if code != 250:
             raise smtplib.SMTPDataError(code, reply)
+        self._resend_record_delivery(message, reply, accepted_recipients)
         return self._resend_extract_provider_message_id(reply)
+
+    @api.model
+    def _resend_extract_resend_email_id(self, reply):
+        if isinstance(reply, bytes):
+            reply = reply.decode("utf-8", errors="ignore")
+        match = RESEND_EMAIL_ID_PATTERN.search(str(reply or ""))
+        return match.group(0).lower() if match else False
+
+    def _resend_record_delivery(self, message, reply, recipients):
+        """Keeps the Resend email id of a threaded email, to fetch later the
+        Message-ID that Resend sets on delivery (see mail.resend.delivery)."""
+        self.ensure_one()
+        resend_email_id = self._resend_extract_resend_email_id(reply)
+        message_id = message["Message-Id"]
+        if not resend_email_id or not message_id:
+            return
+        route_model = self.env["mail.resend.route"].sudo()
+        route = route_model.search(
+            [("mail_message_id.message_id", "=", message_id)], limit=1
+        ) or route_model.search([("provider_message_id", "=", message_id)], limit=1)
+        if not route:
+            return
+        emails = {
+            tools.email_normalize(recipient, strict=False) for recipient in recipients
+        }
+        self.env["mail.resend.delivery"].sudo().create(
+            {
+                "route_id": route.id,
+                "account_id": route.account_id.id,
+                "resend_email_id": resend_email_id,
+                "recipient_emails": " ".join(sorted(filter(None, emails))),
+            }
+        )
 
     @api.model
     def _resend_extract_provider_message_id(self, reply):

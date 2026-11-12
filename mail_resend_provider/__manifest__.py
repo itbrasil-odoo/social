@@ -4,7 +4,7 @@
 {
     "name": "Mail Resend Provider",
     "summary": "Send and receive emails through Resend",
-    "version": "19.0.1.1.1",
+    "version": "19.0.1.2.0",
     "category": "Discuss",
     "license": "AGPL-3",
     "author": "Odoo Community Association (OCA), IT Brasil, Renan Teixeira",
@@ -13,6 +13,7 @@
     "external_dependencies": {"python": ["svix"]},
     "data": [
         "security/ir.model.access.csv",
+        "data/ir_cron.xml",
         "views/mail_resend_account_views.xml",
         "views/ir_mail_server_views.xml",
         "views/res_config_settings_views.xml",

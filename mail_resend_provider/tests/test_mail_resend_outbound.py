@@ -485,6 +485,62 @@ class TestMailResendOutbound(MailResendProviderCommon):
         self.assertEqual(route.provider_message_id, provider_message_id)
         self.assertEqual(route.state, "sent")
 
+    def test_send_records_resend_delivery(self):
+        """The Resend SMTP reply only carries the Resend email id: it is kept
+        with the route, and the mail keeps the Odoo Message-ID."""
+        resend_email_id = "01a1cd8b-3cd1-783c-9015-8bf57e8820d9"
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "Delivery",
+                "body_html": "<p>Hello</p>",
+                "email_to": "Recipient <Recipient@Example.com>",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+                "model": "res.partner",
+                "res_id": self.partner_company_2.id,
+                "message_type": "email",
+            }
+        )
+        odoo_message_id = mail.message_id
+        route = self.env["mail.resend.route"].search(
+            [("mail_message_id", "=", mail.mail_message_id.id)]
+        )
+        with self.mock_smtplib_connection(data_reply=(250, resend_email_id.encode())):
+            mail.send()
+        delivery = self.env["mail.resend.delivery"].search(
+            [("route_id", "=", route.id)]
+        )
+        self.assertEqual(delivery.resend_email_id, resend_email_id)
+        self.assertEqual(delivery.recipient_emails, "recipient@example.com")
+        self.assertFalse(delivery.provider_message_id)
+        self.assertEqual(mail.message_id, odoo_message_id)
+
+        ses_message_id = "<0103-ses@sa-east-1.amazonses.com>"
+        with patch(
+            "odoo.addons.mail_resend_provider.models.mail_resend_account."
+            "MailResendAccount._resend_request",
+            return_value={"id": resend_email_id, "message_id": ses_message_id},
+        ):
+            self.env["mail.resend.delivery"]._cron_resolve_provider_message_ids()
+        self.assertEqual(delivery.provider_message_id, ses_message_id)
+        self.assertEqual(delivery.resolve_attempts, 1)
+
+    def test_send_without_route_records_no_delivery(self):
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "No thread",
+                "body_html": "<p>Hello</p>",
+                "email_to": "recipient@example.com",
+                "email_from": "Employee C2 <employee@wrong-domain.test>",
+                "record_company_id": self.company_2.id,
+            }
+        )
+        with self.mock_smtplib_connection(
+            data_reply=(250, b"01a1cd8b-3cd1-783c-9015-8bf57e8820d9")
+        ):
+            mail.send()
+        self.assertFalse(self.env["mail.resend.delivery"].search([]))
+
     def test_send_auto_delete_mail_does_not_crash_after_unlink(self):
         mail = self.env["mail.mail"].create(
             {

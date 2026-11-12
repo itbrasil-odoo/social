@@ -4,6 +4,7 @@
 from . import ir_mail_server
 from . import mail_mail
 from . import mail_resend_account
+from . import mail_resend_delivery
 from . import mail_resend_inbound
 from . import mail_resend_route
 from . import res_company

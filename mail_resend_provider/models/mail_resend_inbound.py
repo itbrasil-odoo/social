@@ -199,6 +199,22 @@ class MailResendInbound(models.Model):
             )
             if route:
                 return route, "provider_message_id"
+            # Resend replaced the Message-ID on delivery: the reply quotes the
+            # new one (e.g. it was sent to the From address, not the reply
+            # address).
+            route = (
+                self.env["mail.resend.delivery"]
+                .sudo()
+                ._find_route(
+                    self.account_id,
+                    provider_message_ids,
+                    sender_email=tools.email_normalize(
+                        message.get("From") or "", strict=False
+                    ),
+                )
+            )
+            if route:
+                return route, "provider_message_id"
         return route_model, False
 
     def _extract_recipients(self, message):
