@@ -169,6 +169,77 @@ class TestMailResendOutbound(MailResendProviderCommon):
             ),
         )
 
+    def _post_from(self, email_from):
+        customer = self.env["res.partner"].create(
+            {"name": "Customer", "email": "customer@example.com"}
+        )
+        message = customer.with_context(mail_notify_force_send=False).message_post(
+            body="<p>Hello</p>",
+            message_type="comment",
+            subtype_xmlid="mail.mt_comment",
+            partner_ids=customer.ids,
+            email_from=email_from,
+        )
+        return (
+            self.env["mail.mail"].sudo().search([("mail_message_id", "=", message.id)])
+        )
+
+    def test_sender_with_own_server_keeps_it(self):
+        """A sender with its own outgoing server is not moved to Resend."""
+        self.env["ir.mail_server"].create(
+            {
+                "name": "Own SMTP",
+                "smtp_host": "smtp.own.example.org",
+                "from_filter": "owner@own.example.org",
+            }
+        )
+        mail = self._post_from("Owner <owner@own.example.org>")
+        self.assertFalse(mail.mail_server_id.resend_managed)
+        self.assertEqual(mail.email_from, "Owner <owner@own.example.org>")
+        # Another sender of the same domain has no server: Resend.
+        mail = self._post_from("Other <other@own.example.org>")
+        self.assertEqual(
+            mail.mail_server_id, self.env.company.resend_outgoing_server_id
+        )
+
+    def test_domain_server_does_not_take_senders_off_resend(self):
+        """Only a server for the exact sender address keeps it; a server for a
+        whole domain does not, so notifications still go through Resend."""
+        self.env["ir.mail_server"].create(
+            {
+                "name": "Domain SMTP",
+                "smtp_host": "smtp.domain.example.org",
+                "from_filter": "domain.example.org",
+            }
+        )
+        mail = self._post_from("Anyone <anyone@domain.example.org>")
+        self.assertEqual(
+            mail.mail_server_id, self.env.company.resend_outgoing_server_id
+        )
+
+    def test_composer_keeps_user_own_server(self):
+        """A user with their own outgoing server does not get Resend as the
+        default server of the composer."""
+        self.env["ir.mail_server"].create(
+            {
+                "name": "Employee SMTP",
+                "smtp_host": "smtp.own.example.org",
+                "from_filter": self.user_employee_c2.partner_id.email,
+            }
+        )
+        form = Form(
+            self.env["mail.compose.message"]
+            .with_user(self.user_employee_c2)
+            .with_context(
+                default_model="res.partner",
+                default_res_ids=self.partner_company_2.ids,
+            )
+        )
+        self.assertNotEqual(
+            form.mail_server_id,
+            self.company_2.resend_outgoing_server_id,
+        )
+
     def test_mail_create_keeps_explicit_reply_to(self):
         mail = self.env["mail.mail"].create(
             {
