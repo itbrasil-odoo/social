@@ -24,16 +24,28 @@ addon | version | maintainers | summary
 [fetchmail_thread_default](fetchmail_thread_default/) | 18.0.1.0.0 |  | Post unkonwn messages to an existing thread
 [mail_activity_cancel_tracking](mail_activity_cancel_tracking/) | 18.0.1.0.0 | <a href='https://github.com/victoralmau'><img src='https://github.com/victoralmau.png' width='32' height='32' style='border-radius:50%;' alt='victoralmau'/></a> | Mail Activity Cancel Tracking
 [mail_activity_unlink_log](mail_activity_unlink_log/) | 18.0.1.0.0 |  | Leave a message when an activity is unlinked
-[mail_gateway](mail_gateway/) | 18.0.1.0.11 |  | Base module for gateway communications
-[mail_gateway_telegram](mail_gateway_telegram/) | 18.0.1.0.0 |  | Set a gateway for telegram
-[mail_gateway_telegram_standalone](mail_gateway_telegram_standalone/) | 18.0.1.0.0 |  | Generic Telegram API connector
-[mail_gateway_whatsapp](mail_gateway_whatsapp/) | 18.0.2.1.5 |  | Set a gateway for WhatsApp
+[mail_gateway](mail_gateway/) | 18.0.1.2.1 |  | Base module for gateway communications
+[mail_gateway_instagram](mail_gateway_instagram/) | 18.0.1.1.0 |  | Set a gateway for Instagram Direct Messages
+[mail_gateway_telegram](mail_gateway_telegram/) | 18.0.1.1.0 |  | Set a gateway for telegram
+[mail_gateway_telegram_standalone](mail_gateway_telegram_standalone/) | 18.0.1.1.0 |  | Generic Telegram API connector
+[mail_gateway_whatsapp](mail_gateway_whatsapp/) | 18.0.2.2.1 |  | Set a gateway for WhatsApp
 [mail_mention_suggestion_config](mail_mention_suggestion_config/) | 18.0.1.0.0 |  | Configure your partner mention suggestions in chatter messages
 [mail_notification_with_history](mail_notification_with_history/) | 18.0.1.0.0 | <a href='https://github.com/TDu'><img src='https://github.com/TDu.png' width='32' height='32' style='border-radius:50%;' alt='TDu'/></a> | Add the previous chatter discussion into new email notifications.
 [mail_thread_create_nolog](mail_thread_create_nolog/) | 18.0.1.0.2 | <a href='https://github.com/sebalix'><img src='https://github.com/sebalix.png' width='32' height='32' style='border-radius:50%;' alt='sebalix'/></a> | Display a fake (non-stored) create log in the chatter.
+[marketing_campaign_budget](marketing_campaign_budget/) | 18.0.1.0.1 | <a href='https://github.com/szalatyzuzanna'><img src='https://github.com/szalatyzuzanna.png' width='32' height='32' style='border-radius:50%;' alt='szalatyzuzanna'/></a> <a href='https://github.com/popadron'><img src='https://github.com/popadron.png' width='32' height='32' style='border-radius:50%;' alt='popadron'/></a> | Add budget and actual cost fields to UTM campaigns
+[marketing_campaign_dates](marketing_campaign_dates/) | 18.0.1.0.1 | <a href='https://github.com/szalatyzuzanna'><img src='https://github.com/szalatyzuzanna.png' width='32' height='32' style='border-radius:50%;' alt='szalatyzuzanna'/></a> <a href='https://github.com/popadron'><img src='https://github.com/popadron.png' width='32' height='32' style='border-radius:50%;' alt='popadron'/></a> | Add start/end dates and date-based filters to UTM campaigns
 [res_company_mastodon_link](res_company_mastodon_link/) | 18.0.1.0.0 | <a href='https://github.com/legalsylvain'><img src='https://github.com/legalsylvain.png' width='32' height='32' style='border-radius:50%;' alt='legalsylvain'/></a> | Add mastodon url at company model
 [res_partner_linkedin_link](res_partner_linkedin_link/) | 18.0.1.0.0 | <a href='https://github.com/legalsylvain'><img src='https://github.com/legalsylvain.png' width='32' height='32' style='border-radius:50%;' alt='legalsylvain'/></a> | Add LinkedIn url at partner model
 [res_partner_mastodon_link](res_partner_mastodon_link/) | 18.0.1.0.0 | <a href='https://github.com/legalsylvain'><img src='https://github.com/legalsylvain.png' width='32' height='32' style='border-radius:50%;' alt='legalsylvain'/></a> | Add mastodon url at partner model
+[social_media_advertising](social_media_advertising/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Campaigns, campaign groups, ads, stages and tags for social media
+[social_media_advertising_linkedin](social_media_advertising_linkedin/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | LinkedIn Ads campaigns, campaign groups and sponsored creatives
+[social_media_base](social_media_base/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Accounts, scheduled posts and daily statistics for the connectors
+[social_media_calendar](social_media_calendar/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Calendar view of the posts, placed on their date and coloured by state
+[social_media_linkedin](social_media_linkedin/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Publish on the LinkedIn pages you administrate, with daily figures
+[social_media_linkedin_sync](social_media_linkedin_sync/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Import LinkedIn publications, their figures, comments and reactions
+[social_media_sync](social_media_sync/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Import posts, figures, comments and reactions from the social media
+[social_media_x](social_media_x/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Publish on X, with the figures of the account and of the posts sent
+[social_media_x_sync](social_media_x_sync/) | 18.0.1.0.0 | <a href='https://github.com/edescalona'><img src='https://github.com/edescalona.png' width='32' height='32' style='border-radius:50%;' alt='edescalona'/></a> | Import the X timeline, its figures and the conversation of each post
 
 [//]: # (end addons)
 

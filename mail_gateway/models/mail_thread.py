@@ -33,9 +33,9 @@ class MailThread(models.AbstractModel):
             ):
                 continue
             message._send_to_gateway_thread(
-                self.env["res.partner.gateway.channel"].browse(
-                    partner_data.get("gateway_channel_id")
-                )
+                self.env["res.partner.gateway.channel"]
+                .sudo()
+                .browse(partner_data.get("gateway_channel_id"))
             )
 
     def _notify_get_recipients(self, message, msg_vals, **kwargs):
@@ -79,15 +79,20 @@ class MailThread(models.AbstractModel):
         for record in self:
             followers = record.message_get_followers()
             if "mail.followers" in followers:
+                partners = self.env["res.partner"].browse(
+                    [
+                        follower["partner"]["id"]
+                        for follower in followers["mail.followers"]
+                    ]
+                )
+                # sudo: res.partner.gateway.channel - technical data used to
+                # know which followers can be reached through a gateway
+                gateway_partners = partners.filtered(
+                    lambda partner: partner.sudo().gateway_channel_ids
+                )
                 store.add(
                     record,
-                    {
-                        "gateway_followers": [
-                            f["partner"]
-                            for f in followers["mail.followers"]
-                            if f["partner"]["gateway_channels"]
-                        ]
-                    },
+                    {"gateway_followers": Store.many(gateway_partners)},
                     as_thread=True,
                 )
         return res

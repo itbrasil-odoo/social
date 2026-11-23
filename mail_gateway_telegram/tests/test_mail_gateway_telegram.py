@@ -9,7 +9,7 @@ from unittest.mock import patch
 import telegram
 from telegram.ext import ExtBot
 
-from odoo.tests.common import tagged
+from odoo.tests.common import new_test_user, tagged
 from odoo.tools import file_open, mute_logger
 
 from odoo.addons.mail.tools.discuss import Store
@@ -81,12 +81,21 @@ class TestMailGatewayTelegram(MailGatewayTestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.webhook = "demo_hook"
+        cls.user = new_test_user(
+            cls.env,
+            login="gateway_test_user",
+            groups="base.group_user,mail_gateway.gateway_user",
+        )
+        cls.webhook_user = new_test_user(
+            cls.env, login="webhook_test_user", groups="base.group_user"
+        )
         cls.gateway = cls.env["mail.gateway"].create(
             {
                 "name": "gateway",
                 "gateway_type": "telegram",
                 "token": "token",
-                "member_ids": [(4, cls.env.user.id)],
+                "webhook_user_id": cls.webhook_user.id,
+                "member_ids": [(4, cls.user.id)],
             }
         )
         cls.password = "my_new_password"
@@ -315,7 +324,7 @@ class TestMailGatewayTelegram(MailGatewayTestCase):
             headers={"Content-Type": "application/json"},
             timeout=timeout,
             # We need to increase the timeout to avoid the test to fail on sticker....
-        )
+        ).raise_for_status()
 
     def test_webhook_unsecure_channel(self):
         self.gateway.webhook_key = self.webhook
@@ -816,6 +825,15 @@ class TestMailGatewayTelegram(MailGatewayTestCase):
             channel._message_update_content(message, "New message")
         self.assertRegex(message.body, ".*New message.*")
 
+    def _get_partner_store_info(self):
+        """Partner data as the web client receives it."""
+        result = Store(self.partner).get_result()
+        return next(
+            item
+            for item in result.get("res.partner", [])
+            if item["id"] == self.partner.id
+        )
+
     def test_messaging(self):
         self.gateway.webhook_key = self.webhook
         self.gateway.flush_recordset()
@@ -829,14 +847,14 @@ class TestMailGatewayTelegram(MailGatewayTestCase):
             self.set_message(self.message_02, self.webhook)
         # Init messaging with new Store
         store = Store()
-        self.env.user._init_messaging(store)
+        self.user._init_messaging(store)
         result = store.get_result()["Store"]
         self.assertIn("gateways", result)
         self.assertTrue(result["gateways"])
         self.assertEqual(1, len(result["gateways"]))
         self.assertEqual(self.gateway.id, result["gateways"][0]["id"])
-        # Validate that partner has no gateway_channels yet via one_id
-        partner_info = Store.one_id(self.partner)
+        # Validate that partner has no gateway_channels yet
+        partner_info = self._get_partner_store_info()
         self.assertIn("gateway_channels", partner_info)
         self.assertEqual(0, len(partner_info["gateway_channels"]))
         # Assign the partner to the channel
@@ -855,6 +873,6 @@ class TestMailGatewayTelegram(MailGatewayTestCase):
         ).merge_partner()
         # Ensure gateway_channel_ids are now assigned
         self.assertTrue(self.partner.gateway_channel_ids)
-        partner_info = Store.one_id(self.partner)
+        partner_info = self._get_partner_store_info()
         self.assertIn("gateway_channels", partner_info)
         self.assertEqual(1, len(partner_info["gateway_channels"]))

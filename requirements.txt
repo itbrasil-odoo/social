@@ -2,5 +2,7 @@
 cairosvg
 lottie
 python-telegram-bot
+requests_oauthlib
 requests_toolbelt
 svix
+tweepy
